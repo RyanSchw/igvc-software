@@ -154,6 +154,8 @@ private:
   double stddev_;
 
   double threshold_;
+  double convex_threshold_;
+
   double tolerance_;
 };
 

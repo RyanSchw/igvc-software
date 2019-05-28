@@ -56,6 +56,7 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "stddev", stddev_);
   igvc::getParam(pNh, "cluster/tolerance", tolerance_);
   igvc::getParam(pNh, "circle_ransac/threshold", threshold_);
+  igvc::getParam(pNh, "convex_threshold", convex_threshold_);
 
   invertMissProbabilities();
 
@@ -136,7 +137,8 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
     //    MapUtils::extractBarrels(fuck, barrels, lidar_to_odom.getOrigin());
     //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels, pc->header.stamp, "/odom", true);
 
-    auto [barrels, clusters, rejected] = MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_);
+    auto [barrels, clusters, rejected] =
+        MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_, convex_threshold_);
     auto barrels_xyzi = MapUtils::vectorToIntensity(barrels);
     auto clusters_xyzi = MapUtils::vectorToIntensity(clusters);
     auto rejected_xyzi = MapUtils::vectorToIntensity(rejected);

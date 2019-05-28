@@ -184,9 +184,13 @@ void cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::Po
              const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance);
 
 std::array<std::vector<pcl::PointCloud<pcl::PointXYZ>>, 3>
-extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold);
+extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold,
+               double convex_threshold);
 
 pcl::PointCloud<pcl::PointXYZI> vectorToIntensity(const std::vector<pcl::PointCloud<pcl::PointXYZ>>& pointclouds);
+
+bool isConvexWithinThreshold(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                             const pcl::PointIndices::ConstPtr& indices, double threshold);
 
 pcl::PointIndices::Ptr extractBarrel(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
                                      const pcl::PointIndices::Ptr& indices,

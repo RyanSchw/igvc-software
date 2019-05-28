@@ -9,8 +9,10 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
+#include <pcl/surface/convex_hull.h>
 
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/segmentation/extract_polygonal_prism_data.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
 #include "map_utils.h"
@@ -313,7 +315,8 @@ void cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::Po
 }
 
 std::array<std::vector<pcl::PointCloud<pcl::PointXYZ>>, 3>
-extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold)
+extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold,
+               double convex_threshold)
 {
   pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
   auto cluster_indices = cluster(pointcloud, tree, 0.15);
@@ -337,22 +340,59 @@ extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const
       continue;
     }
 
-    auto extracted =
-        extractBarrel(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index), tree, origin, threshold);
-    if (!extracted->indices.empty())
+    if (!isConvexWithinThreshold(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index), convex_threshold))
     {
-      auto barrel_dims = calculatePointcloudDims(*pointcloud, *extracted);
-      if (barrel_dims[0] > 0.7 || barrel_dims[1] > 0.7)
-      {
-        rejected.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
-        continue;
-      }
-      barrels.emplace_back();
+      barrels.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
+      continue;
     }
+
+    //    auto extracted =
+    //        extractBarrel(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index), tree, origin, threshold);
+    //    if (!extracted->indices.empty())
+    //    {
+    //      auto barrel_dims = calculatePointcloudDims(*pointcloud, *extracted);
+    //      if (barrel_dims[0] > 0.7 || barrel_dims[1] > 0.7)
+    //      {
+    //        rejected.emplace_back(pointcloudFromIndices(pointcloud,
+    //        boost::make_shared<pcl::PointIndices>(cluster_index))); continue;
+    //      }
+    //      barrels.emplace_back();
+    //    }
     clusters.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
   }
 
   return { barrels, clusters, rejected };
+}
+
+bool isConvexWithinThreshold(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                             const pcl::PointIndices::ConstPtr& indices, double threshold)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr hull_points(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::ConvexHull<pcl::PointXYZ> hull;
+  std::vector<pcl::Vertices> polygons;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr flat = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(*pointcloud);
+  projectTo2D(*flat);
+
+  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
+  voxel_grid.setInputCloud(flat);
+  voxel_grid.setIndices(indices);
+  voxel_grid.setLeafSize(0.1, 0.1, 0.1);
+  voxel_grid.filter(*flat);
+
+  hull.setInputCloud(flat);
+  hull.setIndices(indices);
+  hull.setDimension(2);
+  hull.reconstruct(*hull_points);
+
+  //  pcl::ExtractPolygonalPrismData<pcl::PointXYZ> prism;
+  //  pcl::PointIndices inside_indices;
+  //  prism.setInputCloud(pointcloud);
+  //  prism.setInputPlanarHull(hull_points);
+  //  prism.setHeightLimits(0, 5.0);
+  //  prism.segment(inside_indices);
+
+  return hull_points->points.size() > threshold * flat->points.size();
 }
 
 Eigen::Vector4f calculatePointcloudDims(const pcl::PointCloud<pcl::PointXYZ>& pointcloud,
