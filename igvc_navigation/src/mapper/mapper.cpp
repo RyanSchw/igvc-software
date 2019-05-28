@@ -52,6 +52,11 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "node/debug/publish/cameras/projections", debug_pub_camera_projections);
   igvc::getParam(pNh, "node/debug/publish/filtered_pointclouds", debug_pub_filtered_pointclouds);
 
+  igvc::getParam(pNh, "k", k_);
+  igvc::getParam(pNh, "stddev", stddev_);
+  igvc::getParam(pNh, "cluster/tolerance", tolerance_);
+  igvc::getParam(pNh, "circle_ransac/threshold", threshold_);
+
   invertMissProbabilities();
 
   octomapper_ = std::make_unique<Octomapper>(pNh);
@@ -79,22 +84,30 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
     empty_pc_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/empty_pc", 1);
     ground_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/ground", 1);
     nonground_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/nonground", 1);
+    denoise_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/denoised", 1);
+    cluster_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/cluster", 1);
+    barrels_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/barrelsowo", 1);
+    rejected_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/rejected", 1);
     nonground_projected_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/nonground_projected", 1);
   }
 }
 
 void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc, const tf::Transform& lidar_to_odom)
 {
+  pcl::PointCloud<pcl::PointXYZ> test{};
+  MapUtils::denoise(pc, test, k_, stddev_);
+  MapUtils::debugPublishPointCloud(denoise_pub_, test, pc->header.stamp, pc->header.frame_id, true);
+
   std::vector<Ray> empty_rays;
   pcl::PointCloud<pcl::PointXYZ> filtered_pc{};
 
   if (behind_filter_options_.enabled)
   {
-    MapUtils::filterPointsBehind(*pc, filtered_pc, behind_filter_options_);
+    MapUtils::filterPointsBehind(test, filtered_pc, behind_filter_options_);
   }
   else
   {
-    filtered_pc = *pc;
+    filtered_pc = test;
   }
 
   pcl_ros::transformPointCloud(filtered_pc, filtered_pc, lidar_to_odom);
@@ -113,6 +126,32 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
     MapUtils::debugPublishPointCloud(nonground_pub_, nonground, pc->header.stamp, "/odom",
                                      debug_pub_filtered_pointclouds);
     MapUtils::debugPublishPointCloud(ground_pub_, ground, pc->header.stamp, "/odom", debug_pub_filtered_pointclouds);
+
+    auto fuck = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(nonground);
+    //    pcl::PointCloud<pcl::PointXYZI> clustered{};
+    //    MapUtils::cluster(fuck, clustered, tolerance_);
+    //    MapUtils::debugPublishPointCloud(cluster_pub_, clustered, pc->header.stamp, "/odom", true);
+    //
+    //    pcl::PointCloud<pcl::PointXYZ> barrels{};
+    //    MapUtils::extractBarrels(fuck, barrels, lidar_to_odom.getOrigin());
+    //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels, pc->header.stamp, "/odom", true);
+
+    auto [barrels, clusters, rejected] = MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_);
+    auto barrels_xyzi = MapUtils::vectorToIntensity(barrels);
+    auto clusters_xyzi = MapUtils::vectorToIntensity(clusters);
+    auto rejected_xyzi = MapUtils::vectorToIntensity(rejected);
+
+    pcl::PointCloud<pcl::PointXYZ> combined_clusters{};
+    for (const auto& cluster : clusters)
+    {
+      combined_clusters += cluster;
+    }
+
+    nonground = combined_clusters;
+
+    MapUtils::debugPublishPointCloud(barrels_pub_, barrels_xyzi, pc->header.stamp, "/odom", true);
+    MapUtils::debugPublishPointCloud(cluster_pub_, clusters_xyzi, pc->header.stamp, "/odom", true);
+    MapUtils::debugPublishPointCloud(rejected_pub_, rejected_xyzi, pc->header.stamp, "/odom", true);
 
     MapUtils::projectTo2D(nonground);
     MapUtils::debugPublishPointCloud(nonground_projected_pub_, nonground, pc->header.stamp, "/odom",

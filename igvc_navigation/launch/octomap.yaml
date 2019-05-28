@@ -18,7 +18,7 @@ probability_model:
         prob_miss: 0.5001
         prob_hit: 0.9
 sensor_model:
-    max_range: 5
+    max_range: 15
     angular_resolution: 0.01
 filters:
     behind: # Filters points in a "filter_angle" cone behind the robot
@@ -29,9 +29,9 @@ filters:
         enabled: true
         start_angle: -0.5 #Radians
         end_angle: 0.5
-        ray_start_distance: 1
-        miss_cast_distance: 5
-        max_range: 5
+        ray_start_distance: 1.5
+        miss_cast_distance: 15
+        max_range: 15
     empty_image: # Blur and threshold for determining which points in the segmented image are empty space
         blur:
             kernel: 7
@@ -45,8 +45,8 @@ filters:
         enable: true
         ransac:
             iterations: 400
-            distance_threshold: 0.1
-            eps_angle: 0.5
+            distance_threshold: 0.2
+            eps_angle: 0.2
         fallback:
             plane_distance: 0.04 # +-m from z=0
 map:
@@ -87,9 +87,9 @@ node:
             cameras:
                 lines: false
                 projections: false
-            filtered_pointclouds: false
+            filtered_pointclouds: true
 
-    use_lines: true
+    use_lines: false
     camera:
         use_passed_in_pointcloud: false
         left:
@@ -102,3 +102,9 @@ node:
 cameras:
     resize_width: 400 # pixels
     resize_height: 400
+k: 5
+stddev: 0.00000000001
+cluster:
+    tolerance: 0.15
+circle_ransac:
+    threshold: 0.2

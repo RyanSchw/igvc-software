@@ -121,6 +121,10 @@ private:
   ros::Publisher empty_pc_pub_;
   ros::Publisher ground_pub_;
   ros::Publisher nonground_pub_;
+  ros::Publisher denoise_pub_;
+  ros::Publisher barrels_pub_;
+  ros::Publisher cluster_pub_;
+  ros::Publisher rejected_pub_;
   ros::Publisher nonground_projected_pub_;
   ros::Publisher camera_line_pub_;
 
@@ -145,6 +149,12 @@ private:
   double resolution_;  // Map Resolution
   double radius_;      // Radius to filter lidar points
   double combined_blur_kernel_size_;
+
+  double k_;
+  double stddev_;
+
+  double threshold_;
+  double tolerance_;
 };
 
 #endif  // SRC_MAPPER_H

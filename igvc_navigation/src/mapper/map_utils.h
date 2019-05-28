@@ -13,6 +13,7 @@
 
 #include <image_geometry/pinhole_camera_model.h>
 #include <pcl/point_cloud.h>
+#include <pcl/search/kdtree.h>
 #include <pcl_ros/point_cloud.h>
 #include <tf/transform_datatypes.h>
 
@@ -169,8 +170,49 @@ sensor_msgs::CameraInfoConstPtr scaleCameraInfo(const sensor_msgs::CameraInfoCon
 
 inline bool withinRange(const pcl::PointXYZ& point, double range);
 
-void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<pcl::PointXYZ>& pointcloud,
-                            const uint64 stamp, std::string&& frame, bool debug);
+template <class Point>
+void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<Point>& pointcloud, uint64 stamp,
+                            const std::string& frame, bool debug);
+
+void denoise(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out, double k,
+             double stddev);
+
+std::vector<pcl::PointIndices> cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                       const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance);
+
+void cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZI>& out,
+             const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance);
+
+std::array<std::vector<pcl::PointCloud<pcl::PointXYZ>>, 3>
+extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold);
+
+pcl::PointCloud<pcl::PointXYZI> vectorToIntensity(const std::vector<pcl::PointCloud<pcl::PointXYZ>>& pointclouds);
+
+pcl::PointIndices::Ptr extractBarrel(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                     const pcl::PointIndices::Ptr& indices,
+                                     const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, const tf::Vector3& origin,
+                                     double threshold);
+
+pcl::PointCloud<pcl::PointXYZ> pointcloudFromIndices(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                                     const pcl::PointIndices::ConstPtr& indices);
+
+void extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out,
+                    const tf::Vector3& origin);
+
+Eigen::Vector4f calculatePointcloudDims(const pcl::PointCloud<pcl::PointXYZ>& pointcloud,
+                                        const pcl::PointIndices& indicies);
+
+template <class Point>
+void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<Point>& pointcloud, uint64 stamp,
+                            const std::string& frame, bool debug)
+{
+  if (debug)
+  {
+    pointcloud.header.stamp = stamp;
+    pointcloud.header.frame_id = frame;
+    publisher.publish(pointcloud);
+  }
+}
 }  // namespace MapUtils
 
 inline bool MapUtils::withinRange(const pcl::PointXYZ& point, double range)
