@@ -9,7 +9,7 @@
 #include <sensor_msgs/Image.h>
 #include <tf/transform_listener.h>
 #include <igvc_utils/NodeUtils.hpp>
-#include "velodyne_pointcloud/point_types.h"
+#include <velodyne_pointcloud/point_types.h>
 
 /**
  * Reads from velodyne pointcloud and uses a pinhole camera model in order to correlate pixels to 3d points.

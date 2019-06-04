@@ -26,7 +26,7 @@ class UNet(nn.Module):
 
         self.conv5_1 = nn.Conv2d(64, 32, kernel_size, padding=(kernel_size - 1) // 2)
         self.conv5_2 = nn.Conv2d(32, 32, kernel_size, padding=(kernel_size - 1) // 2)
-        self.predict = nn.Conv2d(32, 3, kernel_size=1)
+        self.predict = nn.Conv2d(32, 1, kernel_size=1)
                 
 
     def forward(self, images):
