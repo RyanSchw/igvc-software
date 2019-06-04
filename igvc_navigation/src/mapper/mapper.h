@@ -74,7 +74,7 @@ public:
    * @param[in] stamp timestamp to be used for debug publishing
    */
   void insertSegmentedImage(cv::Mat&& image, const tf::Transform& base_to_odom, const tf::Transform& camera_to_base,
-                            const ros::Time& stamp, Camera camera);
+                            const ros::Time& stamp, Camera camera, bool use_passed_in_pointcloud);
 
   /**
    * Sets the parameters for the image_geometry::PinholeCameraModel used for projection.
@@ -99,6 +99,8 @@ private:
    * Inverts probabilities for the ProbabilityModels so that miss_probability is more intuitive.
    */
   void invertMissProbabilities();
+
+  std::vector<Ray> getTransformedEmptyRays(const PointCloud& nonground, const tf::Transform& lidar_to_odom);
 
   std::unique_ptr<Octomapper> octomapper_;
   pc_map_pair pc_map_pair_;      // Struct storing both the octomap for the lidar and the cv::Mat map
