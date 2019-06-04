@@ -26,8 +26,7 @@ class UNet(nn.Module):
 
         self.conv5_1 = nn.Conv2d(64, 32, kernel_size, padding=(kernel_size - 1) // 2)
         self.conv5_2 = nn.Conv2d(32, 32, kernel_size, padding=(kernel_size - 1) // 2)
-        self.predict = nn.Conv2d(32, 3, kernel_size=1)
-                
+        self.predict = nn.Conv2d(32, 1, kernel_size=1)
 
     def forward(self, images):
         '''
@@ -46,6 +45,7 @@ class UNet(nn.Module):
         for each example and category.
         '''
         scores = None
+        #print("Your images is: " + str(images.shape))
 
         down1 = F.relu(self.conv1_1(images))
         down1 = F.relu(self.conv1_2(down1))
@@ -68,5 +68,6 @@ class UNet(nn.Module):
         up3 = F.relu(self.conv5_1(up3))
         up3 = F.relu(self.conv5_2(up3))
         scores = torch.sigmoid(self.predict(up3))
+        #print("Your score is: " + str(scores))
 
         return scores 

@@ -1,11 +1,6 @@
 import glob, os
 
-
-<<<<<<< HEAD
 dataset_path = '/home/bert/Desktop/data_igvc/imgs'
-=======
-dataset_path = '/home/yyajima/Desktop/data_igvc/imgs'
->>>>>>> dd0e26fa40ae6def6b496e821422ef2a15140bff
 
 # Percentage of images to be used for the test set
 percentage_test = 10;
