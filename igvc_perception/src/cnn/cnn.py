@@ -49,7 +49,6 @@ class SegmentationModel(object):
         else:
             # load the model
             self.graph = UNet([3,resize_width,resize_height], 3)
-            #self.graph = UNet([1,resize_width,resize_height], 3)
             self.graph.load_state_dict(torch.load(
                     kwargs["model_filename"],map_location='cpu'
             ))
