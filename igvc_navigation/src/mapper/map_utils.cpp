@@ -4,6 +4,7 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/progressive_morphological_filter.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
 #include "map_utils.h"
@@ -46,6 +47,12 @@ std::optional<GroundPlane> filterGroundPlane(const PointCloud& raw_pc, PointClou
 {
   ground.header = raw_pc.header;
   nonground.header = raw_pc.header;
+
+  if (options.use_prog_morph)
+  {
+    progMorphFilter(raw_pc, ground, nonground, options.prog_morph_options);
+    return std::nullopt;
+  }
 
   std::optional<GroundPlane> ground_plane = ransacFilter(raw_pc, ground, nonground, options.ransac_options);
   if (ground_plane)
@@ -133,6 +140,32 @@ void fallbackFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& no
   fallback.filter(nonground);
 }
 
+void progMorphFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& nonground,
+                     const ProgMorphOptions& options)
+{
+  PointCloud::Ptr raw_ptr = raw_pc.makeShared();
+  pcl::PointIndicesPtr ground_indices (new pcl::PointIndices);
+
+  // Create the filtering object
+  pcl::ProgressiveMorphologicalFilter<pcl::PointXYZ> pmf;
+  pmf.setInputCloud(raw_ptr);
+  pmf.setMaxWindowSize(options.max_window_size);
+  pmf.setSlope(options.slope);
+  pmf.setInitialDistance(options.initial_distance);
+  pmf.setMaxDistance(options.max_distance);
+  pmf.extract(ground_indices->indices);
+
+  // Create the filtering object
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  extract.setInputCloud(raw_ptr);
+  extract.setIndices(ground_indices);
+  extract.filter(ground);
+
+  // Extract non-ground returns
+  extract.setNegative(true);
+  extract.filter(nonground);
+}
+
 void blur(cv::Mat& blurred_map, double kernel_size)
 {
   cv::Mat original = blurred_map.clone();
@@ -175,13 +208,21 @@ void getEmptyPoints(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<Ray>& 
   }
 }
 
-void projectToPlane(PointCloud& projected_pc, const GroundPlane& ground_plane, const cv::Mat& image,
-                    const image_geometry::PinholeCameraModel& model, const tf::Transform& camera_to_world, bool is_line)
+void projectToPlane(PointCloud& projected_pc, GroundPlane ground_plane, const cv::Mat& image,
+                    const image_geometry::PinholeCameraModel& model, const tf::Transform& camera_to_world, GroundProjectionOptions options)
 {
+  if (options.use_flat_plane)
+  {
+    ground_plane.a = 0.0;
+    ground_plane.b = 0.0;
+    ground_plane.c = 1.0;
+    ground_plane.d = 0.0;
+  }
+
   int nRows = image.rows;
   int nCols = image.cols;
 
-  uchar match = is_line ? 255u : 0u;
+  uchar match = options.is_line ? 255u : 0u;
 
   int i, j;
   const uchar* p;

@@ -135,6 +135,7 @@ private:
   bool use_ground_filter_;
   bool camera_model_initialized_;
   bool use_lines_;
+  bool flat_plane_assumption_;
 
   bool debug_pub_camera_lines;
   bool debug_pub_camera_projections;

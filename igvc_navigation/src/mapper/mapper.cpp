@@ -26,6 +26,12 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/ground_filter/fallback/plane_distance",
                  ground_filter_options_.fallback_options.plane_distance);
 
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/enable", ground_filter_options_.use_prog_morph);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/max_window_size", ground_filter_options_.prog_morph_options.max_window_size);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/slope", ground_filter_options_.prog_morph_options.slope);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/initial_distance", ground_filter_options_.prog_morph_options.initial_distance);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/max_distance", ground_filter_options_.prog_morph_options.max_distance);
+
   igvc::param(pNh, "filters/empty/enabled", empty_filter_options_.enabled, false);
   igvc::getParam(pNh, "filters/empty/start_angle", empty_filter_options_.start_angle);
   igvc::getParam(pNh, "filters/empty/end_angle", empty_filter_options_.end_angle);
@@ -43,6 +49,8 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/behind/distance", behind_filter_options_.distance);
 
   igvc::getParam(pNh, "filters/combined_map/blur/kernel", combined_map_options_.blur.kernel);
+
+  igvc::getParam(pNh, "projection/use_flat_plane_assumption", flat_plane_assumption_);
 
   igvc::getParam(pNh, "octree/resolution", resolution_);
 
@@ -182,12 +190,12 @@ void Mapper::insertSegmentedImage(cv::Mat&& image, const tf::Transform& base_to_
   image_geometry::PinholeCameraModel model = camera_model_map_.at(camera);
   if (!use_passed_in_pointcloud)
   {
-    MapUtils::projectToPlane(projected_occupied_pc, ground_plane_, image, model, camera_to_base, true);
+    MapUtils::projectToPlane(projected_occupied_pc, ground_plane_, image, model, camera_to_base, {flat_plane_assumption_, true});
     pcl_ros::transformPointCloud(projected_occupied_pc, projected_occupied_pc, base_to_odom);
   }
 
   processImageFreeSpace(image);
-  MapUtils::projectToPlane(projected_empty_pc, ground_plane_, image, model, camera_to_base, false);
+  MapUtils::projectToPlane(projected_empty_pc, ground_plane_, image, model, camera_to_base, {flat_plane_assumption_, false});
 
   pcl_ros::transformPointCloud(projected_empty_pc, projected_empty_pc, base_to_odom);
   MapUtils::projectTo2D(projected_empty_pc);
