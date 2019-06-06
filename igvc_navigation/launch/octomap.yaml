@@ -54,7 +54,7 @@ filters:
             max_window_size: 10
             slope: 1.0
             initial_distance: 0.5
-            max_distance: 3.0
+            max_distance: 1.5
             base: 4.0
 projection:
     use_flat_plane_assumption: true
