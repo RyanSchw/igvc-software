@@ -49,6 +49,14 @@ filters:
             eps_angle: 0.2
         fallback:
             plane_distance: 0.04 # +-m from z=0
+        prog_morph:
+            enable: true
+            max_window_size: 10
+            slope: 1.0
+            initial_distance: 0.5
+            max_distance: 3.0
+projection:
+    use_flat_plane_assumption: true
 map:
     # In units of meters, not cells
     # width of grid = width / resolution
@@ -85,8 +93,8 @@ node:
         publish:
             map_debug_pcl: true
             cameras:
-                lines: false
-                projections: false
+                lines: true
+                projections: true
             filtered_pointclouds: true
 
     use_lines: false
