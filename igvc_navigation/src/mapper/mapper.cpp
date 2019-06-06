@@ -31,6 +31,7 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/ground_filter/prog_morph/slope", ground_filter_options_.prog_morph_options.slope);
   igvc::getParam(pNh, "filters/ground_filter/prog_morph/initial_distance", ground_filter_options_.prog_morph_options.initial_distance);
   igvc::getParam(pNh, "filters/ground_filter/prog_morph/max_distance", ground_filter_options_.prog_morph_options.max_distance);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/base", ground_filter_options_.prog_morph_options.base);
 
   igvc::param(pNh, "filters/empty/enabled", empty_filter_options_.enabled, false);
   igvc::getParam(pNh, "filters/empty/start_angle", empty_filter_options_.start_angle);
@@ -60,8 +61,8 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "node/debug/publish/cameras/projections", debug_pub_camera_projections);
   igvc::getParam(pNh, "node/debug/publish/filtered_pointclouds", debug_pub_filtered_pointclouds);
 
-  igvc::getParam(pNh, "k", k_);
-  igvc::getParam(pNh, "stddev", stddev_);
+  igvc::getParam(pNh, "denoise/k", k_);
+  igvc::getParam(pNh, "denoise/stddev", stddev_);
   igvc::getParam(pNh, "cluster/tolerance", tolerance_);
   igvc::getParam(pNh, "circle_ransac/threshold", threshold_);
   igvc::getParam(pNh, "convex_threshold", convex_threshold_);
@@ -136,32 +137,32 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
                                      debug_pub_filtered_pointclouds);
     MapUtils::debugPublishPointCloud(ground_pub_, ground, pc->header.stamp, "/odom", debug_pub_filtered_pointclouds);
 
-    auto fuck = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(nonground);
-    //    pcl::PointCloud<pcl::PointXYZI> clustered{};
-    //    MapUtils::cluster(fuck, clustered, tolerance_);
-    //    MapUtils::debugPublishPointCloud(cluster_pub_, clustered, pc->header.stamp, "/odom", true);
-    //
-    //    pcl::PointCloud<pcl::PointXYZ> barrels{};
-    //    MapUtils::extractBarrels(fuck, barrels, lidar_to_odom.getOrigin());
-    //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels, pc->header.stamp, "/odom", true);
+//    auto fuck = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(nonground);
+//    //    pcl::PointCloud<pcl::PointXYZI> clustered{};
+//    //    MapUtils::cluster(fuck, clustered, tolerance_);
+//    //    MapUtils::debugPublishPointCloud(cluster_pub_, clustered, pc->header.stamp, "/odom", true);
+//    //
+//    //    pcl::PointCloud<pcl::PointXYZ> barrels{};
+//    //    MapUtils::extractBarrels(fuck, barrels, lidar_to_odom.getOrigin());
+//    //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels, pc->header.stamp, "/odom", true);
+//
+//    auto [barrels, clusters, rejected] =
+//        MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_, convex_threshold_);
+//    auto barrels_xyzi = MapUtils::vectorToIntensity(barrels);
+//    auto clusters_xyzi = MapUtils::vectorToIntensity(clusters);
+//    auto rejected_xyzi = MapUtils::vectorToIntensity(rejected);
+//
+//    pcl::PointCloud<pcl::PointXYZ> combined_clusters{};
+//    for (const auto& cluster : clusters)
+//    {
+//      combined_clusters += cluster;
+//    }
 
-    auto [barrels, clusters, rejected] =
-        MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_, convex_threshold_);
-    auto barrels_xyzi = MapUtils::vectorToIntensity(barrels);
-    auto clusters_xyzi = MapUtils::vectorToIntensity(clusters);
-    auto rejected_xyzi = MapUtils::vectorToIntensity(rejected);
+//    nonground = combined_clusters;
 
-    pcl::PointCloud<pcl::PointXYZ> combined_clusters{};
-    for (const auto& cluster : clusters)
-    {
-      combined_clusters += cluster;
-    }
-
-    nonground = combined_clusters;
-
-    MapUtils::debugPublishPointCloud(barrels_pub_, barrels_xyzi, pc->header.stamp, "/odom", true);
-    MapUtils::debugPublishPointCloud(cluster_pub_, clusters_xyzi, pc->header.stamp, "/odom", true);
-    MapUtils::debugPublishPointCloud(rejected_pub_, rejected_xyzi, pc->header.stamp, "/odom", true);
+//    MapUtils::debugPublishPointCloud(barrels_pub_, barrels_xyzi, pc->header.stamp, "/odom", true);
+//    MapUtils::debugPublishPointCloud(cluster_pub_, clusters_xyzi, pc->header.stamp, "/odom", true);
+//    MapUtils::debugPublishPointCloud(rejected_pub_, rejected_xyzi, pc->header.stamp, "/odom", true);
 
     MapUtils::projectTo2D(nonground);
     MapUtils::debugPublishPointCloud(nonground_projected_pub_, nonground, pc->header.stamp, "/odom",

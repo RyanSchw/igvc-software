@@ -52,10 +52,11 @@ struct FallbackOptions
 
 struct ProgMorphOptions
 {
-  double max_window_size;
+  int max_window_size;
   double slope;
   double initial_distance;
   double max_distance;
+  double base;
 };
 
 struct GroundFilterOptions

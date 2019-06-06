@@ -159,6 +159,7 @@ void progMorphFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& n
   pcl::ProgressiveMorphologicalFilter<pcl::PointXYZ> pmf;
   pmf.setInputCloud(raw_ptr);
   pmf.setMaxWindowSize(options.max_window_size);
+  pmf.setBase(options.base);
   pmf.setSlope(options.slope);
   pmf.setInitialDistance(options.initial_distance);
   pmf.setMaxDistance(options.max_distance);

@@ -55,6 +55,7 @@ filters:
             slope: 1.0
             initial_distance: 0.5
             max_distance: 3.0
+            base: 4.0
 projection:
     use_flat_plane_assumption: true
 map:
@@ -110,8 +111,9 @@ node:
 cameras:
     resize_width: 400 # pixels
     resize_height: 400
-k: 5
-stddev: 0.00000000001
+denoise:
+  k: 5
+  stddev: 0.00000000001
 cluster:
     tolerance: 0.15
 circle_ransac:
