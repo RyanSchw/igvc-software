@@ -49,6 +49,9 @@ filters:
             eps_angle: 0.5
         fallback:
             plane_distance: 0.04 # +-m from z=0
+projection:
+    use_custom_weights: true
+    custom_coeff: 0.1
 map:
     # In units of meters, not cells
     # width of grid = width / resolution

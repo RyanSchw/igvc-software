@@ -245,6 +245,26 @@ void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &pc, bo
   pair.octree->setProbMiss(old_prob_miss);
 }
 
+void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &pc, bool occupied,
+                              ProbabilityModel model, tf::Point sensor_pos, std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> weight) const
+{
+  octomap::Pointcloud octo_cloud;
+  PCL_to_Octomap(pc, octo_cloud);
+  octomap::KeySet keyset{};
+
+  octomap::point3d sensor = octomap::pointTfToOctomap(sensor_pos);
+
+  for (const auto &p : octo_cloud)
+  {
+    octomap::OcTreeKey key;
+    if (pair.octree->coordToKeyChecked(p, key))
+    {
+      float logodds = weight(model, sensor, pair.octree->keyToCoord(key), occupied);
+      pair.octree->updateNode(key, logodds, false);  // lazy_eval = false
+    }
+  }
+}
+
 void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &occupied_pc, const PointCloud &free_pc,
                               ProbabilityModel model) const
 {

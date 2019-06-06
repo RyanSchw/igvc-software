@@ -135,6 +135,7 @@ private:
   bool use_ground_filter_;
   bool camera_model_initialized_;
   bool use_lines_;
+  bool use_custom_projection_weights_;
 
   bool debug_pub_camera_lines;
   bool debug_pub_camera_projections;
@@ -145,6 +146,8 @@ private:
   double resolution_;  // Map Resolution
   double radius_;      // Radius to filter lidar points
   double combined_blur_kernel_size_;
+
+  double custom_projection_coeff_;
 };
 
 #endif  // SRC_MAPPER_H

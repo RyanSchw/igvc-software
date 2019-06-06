@@ -169,6 +169,18 @@ public:
   void insertPoints(struct pc_map_pair& pair, const PointCloud& pc, bool occupied, ProbabilityModel model) const;
 
   /**
+   * Inserts the passed in points to the given pc_map_pair, where the points are either occupied or not depending
+   * on the variable passed in. For this overload, a lambda is called for each point to determine the logodds.
+   *
+   * @param pair
+   * @param pc
+   * @param occupied
+   * @param model
+   * @param weight
+   */
+  void insertPoints(struct pc_map_pair& pair, const PointCloud& pc, bool occupied, ProbabilityModel model,
+                    tf::Point sensor_pos, std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> weight) const;
+  /**
    * Inserts the passed in occupied and free points to the given pc_map_pair
    * @param pair
    * @param occupied_pc
