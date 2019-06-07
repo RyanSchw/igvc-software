@@ -102,6 +102,8 @@ private:
 
   std::vector<Ray> getTransformedEmptyRays(const PointCloud& nonground, const tf::Transform& lidar_to_odom);
 
+  std::function<float(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> getProjectionWeight() const;
+
   std::unique_ptr<Octomapper> octomapper_;
   pc_map_pair pc_map_pair_;      // Struct storing both the octomap for the lidar and the cv::Mat map
   pc_map_pair camera_map_pair_;  // Struct storing both the octomap for the camera projections and the cv::Mat map
