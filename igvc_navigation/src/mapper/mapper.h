@@ -125,6 +125,10 @@ private:
   ros::Publisher empty_pc_pub_;
   ros::Publisher ground_pub_;
   ros::Publisher nonground_pub_;
+  ros::Publisher denoise_pub_;
+  ros::Publisher barrels_pub_;
+  ros::Publisher cluster_pub_;
+  ros::Publisher rejected_pub_;
   ros::Publisher nonground_projected_pub_;
   ros::Publisher camera_line_pub_;
   ros::Publisher filtered_img_pub_;
@@ -143,6 +147,7 @@ private:
   bool use_ground_filter_;
   bool camera_model_initialized_;
   bool use_lines_;
+  bool flat_plane_assumption_;
 
   bool debug_pub_camera_lines;
   bool debug_pub_camera_projections;
@@ -153,6 +158,14 @@ private:
   double resolution_;  // Map Resolution
   double radius_;      // Radius to filter lidar points
   double combined_blur_kernel_size_;
+
+  double k_;
+  double stddev_;
+
+  double threshold_;
+  double convex_threshold_;
+
+  double tolerance_;
 
   cv::Mat center_barrels_mask_;
 };

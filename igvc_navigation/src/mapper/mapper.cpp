@@ -26,6 +26,16 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/ground_filter/fallback/plane_distance",
                  ground_filter_options_.fallback_options.plane_distance);
 
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/enable", ground_filter_options_.use_prog_morph);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/max_window_size",
+                 ground_filter_options_.prog_morph_options.max_window_size);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/slope", ground_filter_options_.prog_morph_options.slope);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/initial_distance",
+                 ground_filter_options_.prog_morph_options.initial_distance);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/max_distance",
+                 ground_filter_options_.prog_morph_options.max_distance);
+  igvc::getParam(pNh, "filters/ground_filter/prog_morph/base", ground_filter_options_.prog_morph_options.base);
+
   igvc::param(pNh, "filters/empty/enabled", empty_filter_options_.enabled, false);
   igvc::getParam(pNh, "filters/empty/start_angle", empty_filter_options_.start_angle);
   igvc::getParam(pNh, "filters/empty/end_angle", empty_filter_options_.end_angle);
@@ -44,6 +54,7 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
 
   igvc::getParam(pNh, "filters/combined_map/blur/kernel", combined_map_options_.blur.kernel);
 
+  igvc::getParam(pNh, "filters/remove_barrels/enable", remove_barrel_options_.enable);
   igvc::getParam(pNh, "filters/remove_barrels/low/h", remove_barrel_options_.low_h);
   igvc::getParam(pNh, "filters/remove_barrels/low/s", remove_barrel_options_.low_s);
   igvc::getParam(pNh, "filters/remove_barrels/low/v", remove_barrel_options_.low_v);
@@ -53,6 +64,8 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/remove_barrels/kernel_size/width", remove_barrel_options_.kernel_width);
   igvc::getParam(pNh, "filters/remove_barrels/kernel_size/height", remove_barrel_options_.kernel_height);
 
+  igvc::getParam(pNh, "projection/use_flat_plane_assumption", flat_plane_assumption_);
+
   igvc::getParam(pNh, "octree/resolution", resolution_);
 
   igvc::getParam(pNh, "node/use_lines", use_lines_);
@@ -60,6 +73,12 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "node/debug/publish/cameras/lines", debug_pub_camera_lines);
   igvc::getParam(pNh, "node/debug/publish/cameras/projections", debug_pub_camera_projections);
   igvc::getParam(pNh, "node/debug/publish/filtered_pointclouds", debug_pub_filtered_pointclouds);
+
+  igvc::getParam(pNh, "denoise/k", k_);
+  igvc::getParam(pNh, "denoise/stddev", stddev_);
+  igvc::getParam(pNh, "cluster/tolerance", tolerance_);
+  igvc::getParam(pNh, "circle_ransac/threshold", threshold_);
+  igvc::getParam(pNh, "convex_threshold", convex_threshold_);
 
   invertMissProbabilities();
 
@@ -88,6 +107,10 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
     empty_pc_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/empty_pc", 1);
     ground_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/ground", 1);
     nonground_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/nonground", 1);
+    denoise_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/denoised", 1);
+    cluster_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/cluster", 1);
+    barrels_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/barrelsowo", 1);
+    rejected_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZI>>("/mapper/debug/rejected", 1);
     nonground_projected_pub_ = pNh.advertise<pcl::PointCloud<pcl::PointXYZ>>("/mapper/debug/nonground_projected", 1);
     filtered_img_pub_ = pNh.advertise<sensor_msgs::Image>("/mapper/filtered_image", 1);
     removed_barrels_pub_ = pNh.advertise<sensor_msgs::Image>("/mapper/removed_barrels", 1);
@@ -96,16 +119,20 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
 
 void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc, const tf::Transform& lidar_to_odom)
 {
+  pcl::PointCloud<pcl::PointXYZ> test{};
+  MapUtils::denoise(pc, test, k_, stddev_);
+  MapUtils::debugPublishPointCloud(denoise_pub_, test, pc->header.stamp, pc->header.frame_id, true);
+
   std::vector<Ray> empty_rays;
   pcl::PointCloud<pcl::PointXYZ> filtered_pc{};
 
   if (behind_filter_options_.enabled)
   {
-    MapUtils::filterPointsBehind(*pc, filtered_pc, behind_filter_options_);
+    MapUtils::filterPointsBehind(test, filtered_pc, behind_filter_options_);
   }
   else
   {
-    filtered_pc = *pc;
+    filtered_pc = test;
   }
 
   pcl_ros::transformPointCloud(filtered_pc, filtered_pc, lidar_to_odom);
@@ -124,6 +151,33 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
     MapUtils::debugPublishPointCloud(nonground_pub_, nonground, pc->header.stamp, "/odom",
                                      debug_pub_filtered_pointclouds);
     MapUtils::debugPublishPointCloud(ground_pub_, ground, pc->header.stamp, "/odom", debug_pub_filtered_pointclouds);
+
+    //    auto fuck = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(nonground);
+    //    //    pcl::PointCloud<pcl::PointXYZI> clustered{};
+    //    //    MapUtils::cluster(fuck, clustered, tolerance_);
+    //    //    MapUtils::debugPublishPointCloud(cluster_pub_, clustered, pc->header.stamp, "/odom", true);
+    //    //
+    //    //    pcl::PointCloud<pcl::PointXYZ> barrels{};
+    //    //    MapUtils::extractBarrels(fuck, barrels, lidar_to_odom.getOrigin());
+    //    //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels, pc->header.stamp, "/odom", true);
+    //
+    //    auto [barrels, clusters, rejected] =
+    //        MapUtils::extractBarrels(fuck, lidar_to_odom.getOrigin(), threshold_, convex_threshold_);
+    //    auto barrels_xyzi = MapUtils::vectorToIntensity(barrels);
+    //    auto clusters_xyzi = MapUtils::vectorToIntensity(clusters);
+    //    auto rejected_xyzi = MapUtils::vectorToIntensity(rejected);
+    //
+    //    pcl::PointCloud<pcl::PointXYZ> combined_clusters{};
+    //    for (const auto& cluster : clusters)
+    //    {
+    //      combined_clusters += cluster;
+    //    }
+
+    //    nonground = combined_clusters;
+
+    //    MapUtils::debugPublishPointCloud(barrels_pub_, barrels_xyzi, pc->header.stamp, "/odom", true);
+    //    MapUtils::debugPublishPointCloud(cluster_pub_, clusters_xyzi, pc->header.stamp, "/odom", true);
+    //    MapUtils::debugPublishPointCloud(rejected_pub_, rejected_xyzi, pc->header.stamp, "/odom", true);
 
     MapUtils::projectTo2D(nonground);
     MapUtils::debugPublishPointCloud(nonground_projected_pub_, nonground, pc->header.stamp, "/odom",
@@ -193,18 +247,20 @@ void Mapper::insertSegmentedImage(cv::Mat&& image, const tf::Transform& base_to_
   image_geometry::PinholeCameraModel model = camera_model_map_.at(camera);
   if (!use_passed_in_pointcloud)
   {
-    MapUtils::projectToPlane(projected_occupied_pc, ground_plane_, image, model, camera_to_base, true);
+    MapUtils::projectToPlane(projected_occupied_pc, ground_plane_, image, model, camera_to_base,
+                             { flat_plane_assumption_, true });
     pcl_ros::transformPointCloud(projected_occupied_pc, projected_occupied_pc, base_to_odom);
   }
 
-//  if (static_cast<int>(camera) == 1)
-//  {
-//    MapUtils::filterBarrels(image, center_barrels_mask_);
-//    MapUtils::debugPublishImage(filtered_img_pub_, image, stamp, true);
-//  }
+  if (static_cast<int>(camera) == 1 && remove_barrel_options_.enable)
+  {
+    MapUtils::filterBarrels(image, center_barrels_mask_);
+    MapUtils::debugPublishImage(filtered_img_pub_, image, stamp, true);
+  }
 
   processImageFreeSpace(image);
-  MapUtils::projectToPlane(projected_empty_pc, ground_plane_, image, model, camera_to_base, false);
+  MapUtils::projectToPlane(projected_empty_pc, ground_plane_, image, model, camera_to_base,
+                           { flat_plane_assumption_, false });
 
   pcl_ros::transformPointCloud(projected_empty_pc, projected_empty_pc, base_to_odom);
   MapUtils::projectTo2D(projected_empty_pc);
@@ -331,7 +387,10 @@ void Mapper::insertBackCircle(const pcl::PointCloud<pcl::PointXYZ>::Ptr msg, tf:
 
 void Mapper::setCenterImage(cv::Mat& image)
 {
-  MapUtils::removeBarrels(image, remove_barrel_options_);
-  center_barrels_mask_ = image;
-  MapUtils::debugPublishImage(removed_barrels_pub_, image, ros::Time::now(), true);
+  if (remove_barrel_options_.enable)
+  {
+    MapUtils::removeBarrels(image, remove_barrel_options_);
+    center_barrels_mask_ = image;
+    MapUtils::debugPublishImage(removed_barrels_pub_, image, ros::Time::now(), true);
+  }
 }

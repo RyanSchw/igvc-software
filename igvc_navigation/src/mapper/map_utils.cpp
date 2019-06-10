@@ -1,9 +1,19 @@
 #include <unordered_set>
 
+#include <pcl/common/common.h>
+#include <pcl/features/normal_3d.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
+#include <pcl/surface/convex_hull.h>
+
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/segmentation/extract_polygonal_prism_data.h>
+#include <pcl/segmentation/progressive_morphological_filter.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
 #include "map_utils.h"
@@ -46,6 +56,12 @@ std::optional<GroundPlane> filterGroundPlane(const PointCloud& raw_pc, PointClou
 {
   ground.header = raw_pc.header;
   nonground.header = raw_pc.header;
+
+  if (options.use_prog_morph)
+  {
+    progMorphFilter(raw_pc, ground, nonground, options.prog_morph_options);
+    return std::nullopt;
+  }
 
   std::optional<GroundPlane> ground_plane = ransacFilter(raw_pc, ground, nonground, options.ransac_options);
   if (ground_plane)
@@ -133,6 +149,33 @@ void fallbackFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& no
   fallback.filter(nonground);
 }
 
+void progMorphFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& nonground,
+                     const ProgMorphOptions& options)
+{
+  PointCloud::Ptr raw_ptr = raw_pc.makeShared();
+  pcl::PointIndicesPtr ground_indices (new pcl::PointIndices);
+
+  // Create the filtering object
+  pcl::ProgressiveMorphologicalFilter<pcl::PointXYZ> pmf;
+  pmf.setInputCloud(raw_ptr);
+  pmf.setMaxWindowSize(options.max_window_size);
+  pmf.setBase(options.base);
+  pmf.setSlope(options.slope);
+  pmf.setInitialDistance(options.initial_distance);
+  pmf.setMaxDistance(options.max_distance);
+  pmf.extract(ground_indices->indices);
+
+  // Create the filtering object
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  extract.setInputCloud(raw_ptr);
+  extract.setIndices(ground_indices);
+  extract.filter(ground);
+
+  // Extract non-ground returns
+  extract.setNegative(true);
+  extract.filter(nonground);
+}
+
 void blur(cv::Mat& blurred_map, double kernel_size)
 {
   cv::Mat original = blurred_map.clone();
@@ -175,13 +218,21 @@ void getEmptyPoints(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<Ray>& 
   }
 }
 
-void projectToPlane(PointCloud& projected_pc, const GroundPlane& ground_plane, const cv::Mat& image,
-                    const image_geometry::PinholeCameraModel& model, const tf::Transform& camera_to_world, bool is_line)
+void projectToPlane(PointCloud& projected_pc, GroundPlane ground_plane, const cv::Mat& image,
+                    const image_geometry::PinholeCameraModel& model, const tf::Transform& camera_to_world, GroundProjectionOptions options)
 {
+  if (options.use_flat_plane)
+  {
+    ground_plane.a = 0.0;
+    ground_plane.b = 0.0;
+    ground_plane.c = 1.0;
+    ground_plane.d = 0.0;
+  }
+
   int nRows = image.rows;
   int nCols = image.cols;
 
-  uchar match = is_line ? 255u : 0u;
+  uchar match = options.is_line ? 255u : 0u;
 
   int i, j;
   const uchar* p;
@@ -249,15 +300,267 @@ sensor_msgs::CameraInfoConstPtr scaleCameraInfo(const sensor_msgs::CameraInfoCon
   return changed_camera_info;
 }
 
-void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<pcl::PointXYZ>& pointcloud,
-                            const uint64 stamp, std::string&& frame, bool debug)
+void denoise(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out, double k,
+             double stddev)
 {
-  if (debug)
+  pcl::PointCloud<pcl::PointXYZ>::Ptr after_sor(new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+  sor.setInputCloud(pointcloud);
+  sor.setMeanK(k);
+  sor.setStddevMulThresh(stddev);
+  sor.filter(*after_sor);
+
+  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
+  voxel_grid.setInputCloud(after_sor);
+  voxel_grid.setLeafSize(0.1, 0.1, 0.1);
+  voxel_grid.filter(out);
+}
+
+std::vector<pcl::PointIndices> cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                       const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr copy(new pcl::PointCloud<pcl::PointXYZ>(*pointcloud));
+  projectTo2D(*copy);
+
+  std::vector<pcl::PointIndices> cluster_indices;
+  pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+  ec.setClusterTolerance(tolerance);  // 2cm
+  ec.setMinClusterSize(10);
+  ec.setMaxClusterSize(500);
+  ec.setSearchMethod(tree);
+  ec.setInputCloud(copy);
+  ec.extract(cluster_indices);
+
+  return cluster_indices;
+}
+
+void cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZI>& out,
+             const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance)
+{
+  auto cluster_indices = cluster(pointcloud, tree, tolerance);
+
+  int j = 0;
+  for (const auto& cluster_indice : cluster_indices)
   {
-    pointcloud.header.stamp = stamp;
-    pointcloud.header.frame_id = frame;
-    publisher.publish(pointcloud);
+    for (int index : cluster_indice.indices)
+    {
+      const auto point = pointcloud->points[index];
+      pcl::PointXYZI xyzi{};
+      xyzi.x = point.x;
+      xyzi.y = point.y;
+      xyzi.z = point.z;
+      xyzi.intensity = j;
+      out.points.emplace_back(xyzi);  //*
+    }
+    j++;
   }
+}
+
+std::array<std::vector<pcl::PointCloud<pcl::PointXYZ>>, 3>
+extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold,
+               double convex_threshold)
+{
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+  auto cluster_indices = cluster(pointcloud, tree, 0.15);
+
+  std::vector<pcl::PointCloud<pcl::PointXYZ>> barrels;
+  std::vector<pcl::PointCloud<pcl::PointXYZ>> clusters;
+  std::vector<pcl::PointCloud<pcl::PointXYZ>> rejected;
+
+  for (const auto& cluster_index : cluster_indices)
+  {
+    auto dims = calculatePointcloudDims(*pointcloud, cluster_index);
+    if (dims[2] < 0.25)
+    {
+      rejected.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
+      continue;
+    }
+
+    if (cluster_index.indices.size() > 250)
+    {
+      rejected.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
+      continue;
+    }
+
+    if (!isConvexWithinThreshold(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index), convex_threshold))
+    {
+      barrels.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
+      continue;
+    }
+
+    //    auto extracted =
+    //        extractBarrel(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index), tree, origin, threshold);
+    //    if (!extracted->indices.empty())
+    //    {
+    //      auto barrel_dims = calculatePointcloudDims(*pointcloud, *extracted);
+    //      if (barrel_dims[0] > 0.7 || barrel_dims[1] > 0.7)
+    //      {
+    //        rejected.emplace_back(pointcloudFromIndices(pointcloud,
+    //        boost::make_shared<pcl::PointIndices>(cluster_index))); continue;
+    //      }
+    //      barrels.emplace_back();
+    //    }
+    clusters.emplace_back(pointcloudFromIndices(pointcloud, boost::make_shared<pcl::PointIndices>(cluster_index)));
+  }
+
+  return { barrels, clusters, rejected };
+}
+
+bool isConvexWithinThreshold(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                             const pcl::PointIndices::ConstPtr& indices, double threshold)
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr hull_points(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::ConvexHull<pcl::PointXYZ> hull;
+  std::vector<pcl::Vertices> polygons;
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr flat = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(*pointcloud);
+  projectTo2D(*flat);
+
+  pcl::VoxelGrid<pcl::PointXYZ> voxel_grid;
+  voxel_grid.setInputCloud(flat);
+  voxel_grid.setIndices(indices);
+  voxel_grid.setLeafSize(0.1, 0.1, 0.1);
+  voxel_grid.filter(*flat);
+
+  hull.setInputCloud(flat);
+  hull.setIndices(indices);
+  hull.setDimension(2);
+  hull.reconstruct(*hull_points);
+
+  //  pcl::ExtractPolygonalPrismData<pcl::PointXYZ> prism;
+  //  pcl::PointIndices inside_indices;
+  //  prism.setInputCloud(pointcloud);
+  //  prism.setInputPlanarHull(hull_points);
+  //  prism.setHeightLimits(0, 5.0);
+  //  prism.segment(inside_indices);
+
+  return hull_points->points.size() > threshold * flat->points.size();
+}
+
+Eigen::Vector4f calculatePointcloudDims(const pcl::PointCloud<pcl::PointXYZ>& pointcloud,
+                                        const pcl::PointIndices& indicies)
+{
+  Eigen::Vector4f min_pt{};
+  Eigen::Vector4f max_pt{};
+
+  pcl::getMinMax3D(pointcloud, indicies, min_pt, max_pt);
+  return max_pt - min_pt;
+}
+
+pcl::PointCloud<pcl::PointXYZI> vectorToIntensity(const std::vector<pcl::PointCloud<pcl::PointXYZ>>& pointclouds)
+{
+  pcl::PointCloud<pcl::PointXYZI> out{};
+  int index = 0;
+  for (const auto& pointcloud : pointclouds)
+  {
+    for (const auto& point : pointcloud.points)
+    {
+      pcl::PointXYZI xyzi{};
+      xyzi.x = point.x;
+      xyzi.y = point.y;
+      xyzi.z = point.z;
+      xyzi.intensity = index;
+      out.points.emplace_back(xyzi);
+    }
+    index++;
+  }
+
+  return out;
+}
+
+pcl::PointIndices::Ptr extractBarrel(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                     const pcl::PointIndices::Ptr& indices,
+                                     const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, const tf::Vector3& origin,
+                                     double threshold)
+{
+  pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+  pcl::SACSegmentation<pcl::PointXYZ> seg;
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  pcl::ExtractIndices<pcl::Normal> extract_normals;
+
+  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>);
+
+  pcl::PointCloud<pcl::PointXYZ>::Ptr flattened =
+      boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>(pointcloudFromIndices(pointcloud, indices));
+  projectTo2D(*flattened);
+  //
+  //  ne.setSearchMethod(tree);
+  //  ne.setInputCloud(flattened);
+  //  ne.setRadiusSearch(0.1);
+  //  ne.setViewPoint(origin.x(), origin.y(), origin.z());
+  //  ne.compute(*cloud_normals);
+
+  // PROJECT TO 2D, get indices, then yay ^.^
+  seg.setOptimizeCoefficients(true);
+  seg.setModelType(pcl::SACMODEL_CIRCLE2D);
+  seg.setMethodType(pcl::SAC_RANSAC);
+  seg.setMaxIterations(10000);
+  seg.setDistanceThreshold(threshold);
+  seg.setRadiusLimits(0.2, 0.3);
+  seg.setAxis({ 0, 0, 1 });
+  seg.setInputCloud(flattened);
+  seg.setIndices(indices);
+
+  pcl::PointIndices::Ptr inliers_cylinder(new pcl::PointIndices);
+  pcl::ModelCoefficients::Ptr coefficients_cylinder(new pcl::ModelCoefficients);
+  seg.segment(*inliers_cylinder, *coefficients_cylinder);
+
+  return inliers_cylinder;
+}
+
+pcl::PointCloud<pcl::PointXYZ> pointcloudFromIndices(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                                     const pcl::PointIndices::ConstPtr& indices)
+{
+  pcl::PointCloud<pcl::PointXYZ> out{};
+
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  extract.setInputCloud(pointcloud);
+  extract.setIndices(indices);
+  extract.setNegative(false);
+  extract.filter(out);
+
+  return out;
+}
+
+void extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out,
+                    const tf::Vector3& origin)
+{
+  pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+  pcl::SACSegmentationFromNormals<pcl::PointXYZ, pcl::Normal> seg;
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  pcl::ExtractIndices<pcl::Normal> extract_normals;
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
+
+  pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>);
+
+  ne.setSearchMethod(tree);
+  ne.setInputCloud(pointcloud);
+  ne.setRadiusSearch(0.1);
+  ne.setViewPoint(origin.x(), origin.y(), origin.z());
+  ne.compute(*cloud_normals);
+
+  seg.setOptimizeCoefficients(true);
+  seg.setModelType(pcl::SACMODEL_CYLINDER);
+  seg.setMethodType(pcl::SAC_RANSAC);
+  seg.setNormalDistanceWeight(0.1);
+  seg.setMaxIterations(10000);
+  seg.setDistanceThreshold(0.01);
+  seg.setRadiusLimits(0.2, 0.3);
+  seg.setAxis({ 0, 0, 1 });
+  seg.setInputCloud(pointcloud);
+  seg.setInputNormals(cloud_normals);
+
+  pcl::PointIndices::Ptr inliers_cylinder(new pcl::PointIndices);
+  pcl::ModelCoefficients::Ptr coefficients_cylinder(new pcl::ModelCoefficients);
+  seg.segment(*inliers_cylinder, *coefficients_cylinder);
+
+  ROS_ERROR_STREAM("Radius: " << coefficients_cylinder->values[6]);
+  ROS_ERROR_STREAM("Coeffs: " << *coefficients_cylinder << "\n");
+
+  extract.setInputCloud(pointcloud);
+  extract.setIndices(inliers_cylinder);
+  extract.setNegative(false);
+  extract.filter(out);
 }
 
 void removeBarrels(cv::Mat& image, RemoveBarrelOptions options)
@@ -278,6 +581,17 @@ void filterBarrels(cv::Mat& image, cv::Mat& mask)
   if (mask.data != nullptr)
   {
     cv::bitwise_or(image, mask, image);
+  }
+}
+
+void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<pcl::PointXYZ>& pointcloud,
+                            const uint64 stamp, std::string&& frame, bool debug)
+{
+  if (debug)
+  {
+    pointcloud.header.stamp = stamp;
+    pointcloud.header.frame_id = frame;
+    publisher.publish(pointcloud);
   }
 }
 

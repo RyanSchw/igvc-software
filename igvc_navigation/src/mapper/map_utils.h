@@ -13,6 +13,7 @@
 
 #include <image_geometry/pinhole_camera_model.h>
 #include <pcl/point_cloud.h>
+#include <pcl/search/kdtree.h>
 #include <pcl_ros/point_cloud.h>
 #include <tf/transform_datatypes.h>
 
@@ -49,10 +50,27 @@ struct FallbackOptions
   float plane_distance;
 };
 
+struct ProgMorphOptions
+{
+  int max_window_size;
+  double slope;
+  double initial_distance;
+  double max_distance;
+  double base;
+};
+
 struct GroundFilterOptions
 {
   RANSACOptions ransac_options;
   FallbackOptions fallback_options;
+  ProgMorphOptions prog_morph_options;
+  bool use_prog_morph;
+};
+
+struct GroundProjectionOptions
+{
+  bool use_flat_plane;
+  bool is_line;
 };
 
 struct GroundPlane
@@ -65,6 +83,7 @@ struct GroundPlane
 
 struct RemoveBarrelOptions
 {
+  bool enable;
   int low_h;
   int high_h;
   int low_s;
@@ -144,6 +163,16 @@ void fallbackFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& no
                     const FallbackOptions& options);
 
 /**
+ * Filters the ground using the progressive morphological filter
+ * @param[in] raw_pc the unfiltered pointcloud
+ * @param[out] ground pointcloud representing the ground
+ * @param[out] nonground filtered pointcloud without the ground
+ * @param[in] options options for the filter
+ */
+void progMorphFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& nonground,
+                     const ProgMorphOptions& options);
+
+/**
  * Projects all black pixels (0, 0, 0) in the image to the ground plane and inserts them into the pointcloud
  * @param[out] projected_pc the pointcloud that holds all projected points
  * @param[in] ground_plane the coefficients of the ground plane
@@ -152,9 +181,9 @@ void fallbackFilter(const PointCloud& raw_pc, PointCloud& ground, PointCloud& no
  * @param[in] camera_to_world the tf::Transform from the camera to the world
  * @param[in] is_line whether to project the lines or the empty_space
  */
-void projectToPlane(PointCloud& projected_pc, const GroundPlane& ground_plane, const cv::Mat& image,
+void projectToPlane(PointCloud& projected_pc, GroundPlane ground_plane, const cv::Mat& image,
                     const image_geometry::PinholeCameraModel& model, const tf::Transform& camera_to_world,
-                    bool is_line);
+                    GroundProjectionOptions options);
 
 /**
  * Projects all points in projected_pc to z=0
@@ -181,6 +210,53 @@ sensor_msgs::CameraInfoConstPtr scaleCameraInfo(const sensor_msgs::CameraInfoCon
 
 inline bool withinRange(const pcl::PointXYZ& point, double range);
 
+template <class Point>
+void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<Point>& pointcloud, uint64 stamp,
+                            const std::string& frame, bool debug);
+
+void denoise(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out, double k,
+             double stddev);
+
+std::vector<pcl::PointIndices> cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                       const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance);
+
+void cluster(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZI>& out,
+             const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, double tolerance);
+
+std::array<std::vector<pcl::PointCloud<pcl::PointXYZ>>, 3>
+extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, const tf::Vector3& origin, double threshold,
+               double convex_threshold);
+
+pcl::PointCloud<pcl::PointXYZI> vectorToIntensity(const std::vector<pcl::PointCloud<pcl::PointXYZ>>& pointclouds);
+
+bool isConvexWithinThreshold(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                             const pcl::PointIndices::ConstPtr& indices, double threshold);
+
+pcl::PointIndices::Ptr extractBarrel(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                     const pcl::PointIndices::Ptr& indices,
+                                     const pcl::search::KdTree<pcl::PointXYZ>::Ptr& tree, const tf::Vector3& origin,
+                                     double threshold);
+
+pcl::PointCloud<pcl::PointXYZ> pointcloudFromIndices(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud,
+                                                     const pcl::PointIndices::ConstPtr& indices);
+
+void extractBarrels(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pointcloud, pcl::PointCloud<pcl::PointXYZ>& out,
+                    const tf::Vector3& origin);
+
+Eigen::Vector4f calculatePointcloudDims(const pcl::PointCloud<pcl::PointXYZ>& pointcloud,
+                                        const pcl::PointIndices& indicies);
+
+template <class Point>
+void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<Point>& pointcloud, uint64 stamp,
+                            const std::string& frame, bool debug)
+{
+  if (debug)
+  {
+    pointcloud.header.stamp = stamp;
+    pointcloud.header.frame_id = frame;
+    publisher.publish(pointcloud);
+  }
+}
 void debugPublishPointCloud(const ros::Publisher& publisher, pcl::PointCloud<pcl::PointXYZ>& pointcloud,
                             const uint64 stamp, std::string&& frame, bool debug);
 void debugPublishImage(const ros::Publisher& publisher, const cv::Mat& image, const ros::Time stamp, bool debug);
