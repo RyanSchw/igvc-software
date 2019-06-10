@@ -220,39 +220,12 @@ void Octomapper::insertRaysWithStartPoint(pc_map_pair &pair, const std::vector<R
   pair.octree->setProbMiss(old_prob_miss);
 }
 
-void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &pc, bool occupied,
-                              ProbabilityModel model) const
+void Octomapper::insertPoints(
+    struct pc_map_pair &pair, const PointCloud &occupied_pc, const PointCloud &free_pc, ProbabilityModel model,
+    tf::Point sensor_pos,
+    std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> weight) const
 {
-  double old_prob_hit = pair.octree->getProbHit();
-  double old_prob_miss = pair.octree->getProbMiss();
-
-  pair.octree->setProbHit(model.prob_hit);
-  pair.octree->setProbMiss(model.prob_miss);
-
-  octomap::Pointcloud octo_cloud;
-  PCL_to_Octomap(pc, octo_cloud);
-  octomap::KeySet keyset{};
-
-  for (const auto &p : octo_cloud)
-  {
-    octomap::OcTreeKey key;
-    if (pair.octree->coordToKeyChecked(p, key))
-    {
-      pair.octree->updateNode(key, occupied, false);  // lazy_eval = false
-    }
-  }
-  pair.octree->setProbHit(old_prob_hit);
-  pair.octree->setProbMiss(old_prob_miss);
-}
-
-void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &occupied_pc, const PointCloud &free_pc,
-                              ProbabilityModel model) const
-{
-  double old_prob_hit = pair.octree->getProbHit();
-  double old_prob_miss = pair.octree->getProbMiss();
-
-  pair.octree->setProbHit(model.prob_hit);
-  pair.octree->setProbMiss(model.prob_miss);
+  octomap::point3d sensor = octomap::pointTfToOctomap(sensor_pos);
 
   octomap::Pointcloud octo_occupied;
   PCL_to_Octomap(occupied_pc, octo_occupied);
@@ -296,13 +269,19 @@ void Octomapper::insertPoints(struct pc_map_pair &pair, const PointCloud &occupi
   // Insert
   for (auto it = free_keyset.begin(); it != free_keyset.end(); ++it)
   {
-    pair.octree->updateNode(*it, false, false);
+    float logodds = weight(model, sensor, pair.octree->keyToCoord(*it), false);
+    pair.octree->updateNode(*it, logodds, false);  // lazy_eval = false
   }
   for (auto it = occupied_keyset.begin(); it != occupied_keyset.end(); ++it)
   {
-    pair.octree->updateNode(*it, true, false);
+    float logodds = weight(model, sensor, pair.octree->keyToCoord(*it), true);
+    pair.octree->updateNode(*it, logodds, false);  // lazy_eval = false
   }
+}
 
-  pair.octree->setProbHit(old_prob_hit);
-  pair.octree->setProbMiss(old_prob_miss);
+std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> Octomapper::simpleWeight()
+{
+  return [](ProbabilityModel probability_model, octomap::point3d, octomap::point3d, bool occupied) {
+    return occupied ? octomap::logodds(probability_model.prob_hit) : octomap::logodds(probability_model.prob_miss);
+  };
 }

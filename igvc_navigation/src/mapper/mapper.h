@@ -106,6 +106,8 @@ private:
 
   std::vector<Ray> getTransformedEmptyRays(const PointCloud& nonground, const tf::Transform& lidar_to_odom);
 
+  std::function<float(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> getProjectionWeight() const;
+
   std::unique_ptr<Octomapper> octomapper_;
   pc_map_pair pc_map_pair_;      // Struct storing both the octomap for the lidar and the cv::Mat map
   pc_map_pair camera_map_pair_;  // Struct storing both the octomap for the camera projections and the cv::Mat map
@@ -148,6 +150,7 @@ private:
   bool camera_model_initialized_;
   bool use_lines_;
   bool flat_plane_assumption_;
+  bool use_custom_projection_weights_;
 
   bool debug_pub_camera_lines;
   bool debug_pub_camera_projections;
@@ -168,6 +171,8 @@ private:
   double tolerance_;
 
   cv::Mat center_barrels_mask_;
+
+  double custom_projection_coeff_;
 };
 
 #endif  // SRC_MAPPER_H

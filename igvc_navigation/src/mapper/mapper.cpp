@@ -65,6 +65,8 @@ Mapper::Mapper(ros::NodeHandle& pNh) : ground_plane_{ 0, 0, 1, 0 }
   igvc::getParam(pNh, "filters/remove_barrels/kernel_size/height", remove_barrel_options_.kernel_height);
 
   igvc::getParam(pNh, "projection/use_flat_plane_assumption", flat_plane_assumption_);
+  igvc::getParam(pNh, "projection/use_custom_weights", use_custom_projection_weights_);
+  igvc::getParam(pNh, "projection/custom_coeff", custom_projection_coeff_);
 
   igvc::getParam(pNh, "octree/resolution", resolution_);
 
@@ -216,6 +218,25 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
   octomapper_->get_updated_map(pc_map_pair_);
 }
 
+std::function<float(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> Mapper::getProjectionWeight() const
+{
+  auto weigh_func = [=](ProbabilityModel camera_probability_model, octomap::point3d sensor_pos, octomap::point3d point,
+                        bool occupied) -> float {
+    double dist = std::hypot(sensor_pos.x() - point.x(), sensor_pos.y() - point.y());
+    double mult = exp(-custom_projection_coeff_ * dist);
+
+    if (occupied)
+    {
+      return octomap::logodds(mult * (camera_probability_model.prob_hit - 0.5) + 0.5);
+    }
+    else
+    {
+      return octomap::logodds(mult * (camera_probability_model.prob_miss - 0.5) + 0.5);
+    }
+  };
+  return weigh_func;
+}
+
 void Mapper::insertCameraProjection(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
                                     const tf::Transform& base_to_odom)
 {
@@ -226,7 +247,16 @@ void Mapper::insertCameraProjection(const pcl::PointCloud<pcl::PointXYZ>::ConstP
 
   MapUtils::projectTo2D(transformed);
 
-  octomapper_->insertPoints(camera_map_pair_, transformed, true, camera_probability_model_);
+  if (use_custom_projection_weights_)
+  {
+    octomapper_->insertPoints(camera_map_pair_, transformed, pcl::PointCloud<pcl::PointXYZ>{},
+                              camera_probability_model_, base_to_odom.getOrigin(), getProjectionWeight());
+  }
+  else
+  {
+    octomapper_->insertPoints(camera_map_pair_, transformed, pcl::PointCloud<pcl::PointXYZ>{},
+                              camera_probability_model_, base_to_odom.getOrigin());
+  }
 
   octomapper_->get_updated_map(camera_map_pair_);
 }
@@ -279,13 +309,15 @@ void Mapper::insertSegmentedImage(cv::Mat&& image, const tf::Transform& base_to_
     MapUtils::debugPublishPointCloud(camera_projection_pub_right_, projected_empty_pc, pcl_conversions::toPCL(stamp),
                                      "/odom", debug_pub_camera_projections);
   }
-  if (use_passed_in_pointcloud)
+  if (use_custom_projection_weights_)
   {
-    octomapper_->insertPoints(camera_map_pair_, projected_empty_pc, false, camera_probability_model_);
+    octomapper_->insertPoints(camera_map_pair_, projected_occupied_pc, projected_empty_pc, camera_probability_model_,
+                              base_to_odom.getOrigin(), getProjectionWeight());
   }
   else
   {
-    octomapper_->insertPoints(camera_map_pair_, projected_occupied_pc, projected_empty_pc, camera_probability_model_);
+    octomapper_->insertPoints(camera_map_pair_, projected_occupied_pc, projected_empty_pc, camera_probability_model_,
+                              base_to_odom.getOrigin());
   }
 
   octomapper_->get_updated_map(camera_map_pair_);
