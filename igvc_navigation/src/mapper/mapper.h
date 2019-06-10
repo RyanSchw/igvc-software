@@ -12,6 +12,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/publisher.h>
+#include <mutex>
 #include "map_utils.h"
 #include "octomapper.h"
 
@@ -173,6 +174,9 @@ private:
   cv::Mat center_barrels_mask_;
 
   double custom_projection_coeff_;
+
+  std::mutex lidar_mutex_;
+  std::mutex camera_mutex_;
 };
 
 #endif  // SRC_MAPPER_H

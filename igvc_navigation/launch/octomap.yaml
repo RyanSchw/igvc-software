@@ -74,7 +74,7 @@ filters:
 projection:
     use_flat_plane_assumption: true
     use_custom_weights: true
-    custom_coeff: 0.25
+    custom_coeff: 0.35
 
 map:
     # In units of meters, not cells

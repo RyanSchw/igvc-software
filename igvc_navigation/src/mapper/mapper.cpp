@@ -194,13 +194,17 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
       empty_rays = getTransformedEmptyRays(nonground_lidar, lidar_to_odom);
     }
 
+    std::lock_guard<std::mutex> lock(lidar_mutex_);
     octomapper_->insertScan(lidar_to_odom.getOrigin(), pc_map_pair_, nonground, lidar_scan_probability_model_, radius_);
   }
   else
   {
     MapUtils::projectTo2D(filtered_pc);
-    octomapper_->insertScan(lidar_to_odom.getOrigin(), pc_map_pair_, filtered_pc, lidar_scan_probability_model_,
-                            radius_);
+    {
+      std::lock_guard<std::mutex> lock(lidar_mutex_);
+      octomapper_->insertScan(lidar_to_odom.getOrigin(), pc_map_pair_, filtered_pc, lidar_scan_probability_model_,
+                              radius_);
+    }
 
     if (empty_filter_options_.enabled)
     {
@@ -213,9 +217,11 @@ void Mapper::insertLidarScan(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& pc,
       empty_rays = getTransformedEmptyRays(*pc, lidar_to_odom);
     }
   }
-  octomapper_->insertRaysWithStartPoint(pc_map_pair_, empty_rays, false, lidar_free_space_probability_model_);
-
-  octomapper_->get_updated_map(pc_map_pair_);
+  {
+    std::lock_guard<std::mutex> lock(lidar_mutex_);
+    octomapper_->insertRaysWithStartPoint(pc_map_pair_, empty_rays, false, lidar_free_space_probability_model_);
+    octomapper_->get_updated_map(pc_map_pair_);
+  }
 }
 
 std::function<float(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> Mapper::getProjectionWeight() const
@@ -311,16 +317,21 @@ void Mapper::insertSegmentedImage(cv::Mat&& image, const tf::Transform& base_to_
   }
   if (use_custom_projection_weights_)
   {
+    std::lock_guard<std::mutex> lock(camera_mutex_);
     octomapper_->insertPoints(camera_map_pair_, projected_occupied_pc, projected_empty_pc, camera_probability_model_,
                               base_to_odom.getOrigin(), getProjectionWeight());
   }
   else
   {
+    std::lock_guard<std::mutex> lock(camera_mutex_);
     octomapper_->insertPoints(camera_map_pair_, projected_occupied_pc, projected_empty_pc, camera_probability_model_,
                               base_to_odom.getOrigin());
   }
 
-  octomapper_->get_updated_map(camera_map_pair_);
+  {
+    std::lock_guard<std::mutex> lock(camera_mutex_);
+    octomapper_->get_updated_map(camera_map_pair_);
+  }
 }
 
 void Mapper::processImageFreeSpace(cv::Mat& image) const

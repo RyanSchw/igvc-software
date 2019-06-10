@@ -154,7 +154,7 @@ ROSMapper::ROSMapper() : tf_listener_{ std::unique_ptr<tf::TransformListener>(ne
 
   ROS_INFO("Mapper started!");
 
-  ros::MultiThreadedSpinner spinner(2);
+  ros::MultiThreadedSpinner spinner(4);
   spinner.spin();
 }
 
@@ -342,10 +342,7 @@ void ROSMapper::pcCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr &pc)
     return;
   }
 
-  {
-    std::lock_guard<std::mutex> guard(lidar_mutex_);
-    mapper_->insertLidarScan(pc, state_.transform * transforms_.at(lidar_topic_));
-  }
+  mapper_->insertLidarScan(pc, state_.transform * transforms_.at(lidar_topic_));
 
   publish(pc->header.stamp);
 }
@@ -404,11 +401,8 @@ void ROSMapper::segmentedImageCallback(const sensor_msgs::ImageConstPtr &segment
   cv_bridge::CvImagePtr segmented_ptr = cv_bridge::toCvCopy(segmented, "mono8");
   cv::Mat image = segmented_ptr->image;
 
-  {
-    std::lock_guard<std::mutex> guard(camera_mutex_);
-    mapper_->insertSegmentedImage(std::move(image), state_.transform, transforms_.at(topic), segmented->header.stamp,
-                                  camera, use_passed_in_pointcloud_);
-  }
+  mapper_->insertSegmentedImage(std::move(image), state_.transform, transforms_.at(topic), segmented->header.stamp,
+                                camera, use_passed_in_pointcloud_);
 
   publish(pcl_conversions::toPCL(segmented->header.stamp));
 }

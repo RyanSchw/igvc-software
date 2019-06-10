@@ -149,8 +149,5 @@ private:
   RobotState state_;  // Odom -> Base_link
 
   std::unique_ptr<Mapper> mapper_;
-
-  std::mutex lidar_mutex_;
-  std::mutex camera_mutex_;
 };
 #endif  // PROJECT_MAPPER_H
