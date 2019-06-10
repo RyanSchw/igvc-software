@@ -8,15 +8,15 @@ octree:
 probability_model:
     lidar:
         scan: # Hit: points registered by the lidar scan, Miss: ray between the lidar and the hit points
-            prob_miss: 0.55
-            prob_hit: 0.7
+            prob_miss: 0.6
+            prob_hit: 0.8
         ground:
             prob_miss: 0.6
         free_space: # Rays that are not detected by the lidar to have occupied points along them
             prob_miss: 0.9
     camera:
-        prob_miss: 0.7
-        prob_hit: 0.7
+        prob_miss: 0.6
+        prob_hit: 0.85
 sensor_model:
     max_range: 5
     angular_resolution: 0.01
@@ -74,7 +74,7 @@ filters:
 projection:
     use_flat_plane_assumption: true
     use_custom_weights: true
-    custom_coeff: 0.1
+    custom_coeff: 0.25
 
 map:
     # In units of meters, not cells

@@ -170,7 +170,7 @@ public:
    */
   void insertPoints(
       struct pc_map_pair& pair, const PointCloud& occupied_pc, const PointCloud& free_pc, ProbabilityModel model,
-      tf::Point sensor_pos,
+      tf::Point sensor_pos = {},
       std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> weight = simpleWeight()) const;
 
   static std::function<double(ProbabilityModel, octomap::point3d, octomap::point3d, bool)> simpleWeight();
