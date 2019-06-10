@@ -10,6 +10,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl_ros/point_cloud.h>
 #include <ros/publisher.h>
+#include <mutex>
 #include "mapper.h"
 
 class ROSMapper
@@ -148,5 +149,8 @@ private:
   RobotState state_;  // Odom -> Base_link
 
   std::unique_ptr<Mapper> mapper_;
+
+  std::mutex lidar_mutex_;
+  std::mutex camera_mutex_;
 };
 #endif  // PROJECT_MAPPER_H
