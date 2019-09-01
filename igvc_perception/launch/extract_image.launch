@@ -1,0 +1,29 @@
+<!-- converts bag file to raw iamge -->
+
+<launch>
+  <node name="republish1" type="republish" pkg="image_transport" output="screen" args="compressed in:=/usb_cam_center/image_raw raw out:=/usb_cam_center/image_raw" />
+
+  <node name="republish2" type="republish" pkg="image_transport" output="screen" args="compressed in:=/usb_cam_right/image_raw raw out:=/usb_cam_right/image_raw" />
+
+  <node name="republish3" type="republish" pkg="image_transport" output="screen" args="compressed in:=/usb_cam_left/image_raw raw out:=/usb_cam_left/image_raw" />
+
+  <node pkg="rosbag" type="play" name="rosbag" args="-r 5 /home/yyajima/Desktop/igvc_vision_bag/JESSII_COMPO_POST_RAMP_2019-06-08-11-58-48.bag"/>
+
+  <node name="extract" pkg="image_view" type="extract_images" respawn="false" output="screen" cwd="node">
+
+    <remap from="image" to="/usb_cam_center/image_raw"/>
+    <param name="filename_format" value="/home/yyajima/Desktop/igvc_files/center_frame%06i.png"/>
+  </node>
+  
+  <node name="extract2" pkg="image_view" type="extract_images" respawn="false" output="screen" cwd="node">
+
+    <remap from="image" to="/usb_cam_right/image_raw"/>
+    <param name="filename_format" value="/home/yyajima/Desktop/igvc_files/right_frame%06i.png"/>
+  </node>
+
+  <node name="extract3" pkg="image_view" type="extract_images" respawn="false" output="screen" cwd="node">
+    <remap from="image" to="/usb_cam_left/image_raw"/>
+    <param name="filename_format" value="/home/yyajima/Desktop/igvc_files/left_frame%06i.png"/>
+  </node>
+
+</launch>
