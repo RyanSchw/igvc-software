@@ -12,12 +12,10 @@
 
 #include <tf/transform_datatypes.h>
 
-#include <igvc_utils/NodeUtils.hpp>
-#include <igvc_utils/RobotState.hpp>
+#include <igvc_utils/robot_state.h>
+#include <parameter_assertions/assertions.h>
 
 #include "path_follower.h"
-
-using igvc::Assertion;
 
 PathFollower::PathFollower()
 {
@@ -34,20 +32,21 @@ PathFollower::PathFollower()
   double simulation_frequency;
   double lookahead_dist;
   seconds simulation_horizon;
-  igvc::param(pNh, "target_v", target_velocity, 1.0, Assertion::POSITIVE);
-  igvc::param(pNh, "axle_length", axle_length, 0.52, Assertion::POSITIVE);
-  igvc::param(pNh, "k1", k1, 1.0);
-  igvc::param(pNh, "k2", k2, 3.0);
-  igvc::param(pNh, "simulation_frequency", simulation_frequency, 100.0, Assertion::POSITIVE);
-  igvc::param(pNh, "lookahead_dist", lookahead_dist, 2.0, Assertion::POSITIVE);
-  igvc::param(pNh, "simulation_horizon", simulation_horizon, 5.0, Assertion::POSITIVE);
+
+  assertions::param(pNh, "target_v", target_velocity, 1.0);
+  assertions::param(pNh, "axle_length", axle_length, 0.52);
+  assertions::param(pNh, "k1", k1, 1.0);
+  assertions::param(pNh, "k2", k2, 3.0);
+  assertions::param(pNh, "simulation_frequency", simulation_frequency, 100.0);
+  assertions::param(pNh, "lookahead_dist", lookahead_dist, 2.0);
+  assertions::param(pNh, "simulation_horizon", simulation_horizon, 5.0);
 
   controller_ = std::unique_ptr<SmoothControl>(new SmoothControl{
       k1, k2, axle_length, simulation_frequency, target_velocity, lookahead_dist, simulation_horizon });
 
   // load global parameters
-  igvc::getParam(pNh, "maximum_vel", maximum_vel_, Assertion::POSITIVE);
-  igvc::param(pNh, "stop_dist", stop_dist_, 0.9, Assertion::POSITIVE);
+  assertions::getParam(pNh, "maximum_vel", maximum_vel_, { assertions::NumberAssertionType::POSITIVE });
+  assertions::param(pNh, "stop_dist", stop_dist_, 0.9);
 
   ros::Subscriber path_sub = nh.subscribe("/path", 1, &PathFollower::pathCallback, this);
   ros::Subscriber pose_sub = nh.subscribe("/odometry/filtered", 1, &PathFollower::positionCallback, this);
@@ -155,7 +154,7 @@ nav_msgs::PathConstPtr PathFollower::getPatchedPath(const nav_msgs::PathConstPtr
 {
   nav_msgs::PathPtr new_path = boost::make_shared<nav_msgs::Path>(*msg);
   size_t num_poses = new_path->poses.size();
-  for (int i = 0; i < num_poses; i++)
+  for (size_t i = 0; i < num_poses; i++)
   {
     double delta_x = new_path->poses[i + 1].pose.position.x - new_path->poses[i].pose.position.x;
     double delta_y = new_path->poses[i + 1].pose.position.y - new_path->poses[i].pose.position.y;

@@ -12,14 +12,14 @@ https://web.eecs.umich.edu/~kuipers/papers/Park-icra-11.pdf
 
 #define _USE_MATH_DEFINES
 
+#include <ros/ros.h>
 #include <Eigen/Dense>
 #include <cmath>
 
 #include <nav_msgs/Path.h>
 
 #include <igvc_msgs/velocity_pair.h>
-#include <igvc_utils/NodeUtils.hpp>
-#include <igvc_utils/RobotState.hpp>
+#include <igvc_utils/robot_state.h>
 
 struct Action
 {

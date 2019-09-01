@@ -1,5 +1,6 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_geometry/pinhole_camera_model.h>
+#include <parameter_assertions/assertions.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -8,8 +9,12 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <tf/transform_listener.h>
+<<<<<<< HEAD
 #include <igvc_utils/NodeUtils.hpp>
 #include <velodyne_pointcloud/point_types.h>
+=======
+#include "velodyne_pointcloud/point_types.h"
+>>>>>>> 605754bdd02ddeda2d8e3602c53a54f148b48982
 
 /**
  * Reads from velodyne pointcloud and uses a pinhole camera model in order to correlate pixels to 3d points.
@@ -323,11 +328,11 @@ int main(int argc, char **argv)
   ros::NodeHandle n;
   ros::NodeHandle pNh("~");
 
-  igvc::getParam(pNh, "resize_width", g_resize_width);
-  igvc::getParam(pNh, "resize_height", g_resize_height);
-  igvc::getParam(pNh, "line_topic", g_line_topic);
-  igvc::getParam(pNh, "pointcloud_topic", g_pointcloud_topic);
-  igvc::getParam(pNh, "lidar_topic", g_lidar_topic);
+  assertions::getParam(pNh, "resize_width", g_resize_width);
+  assertions::getParam(pNh, "resize_height", g_resize_height);
+  assertions::getParam(pNh, "line_topic", g_line_topic);
+  assertions::getParam(pNh, "pointcloud_topic", g_pointcloud_topic);
+  assertions::getParam(pNh, "lidar_topic", g_lidar_topic);
 
   g_cam_info = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("center_cam/camera_info", ros::Duration(5));
   if (g_cam_info.get() != nullptr)

@@ -7,9 +7,9 @@
 
   <node name="republish3" type="republish" pkg="image_transport" output="screen" args="compressed in:=/usb_cam_left/image_raw raw out:=/usb_cam_left/image_raw" />
     <!-- Create a directory for saving raw images -->
-    <param name="extracted_imgs" command="mkdir -m 777 -p /yyajima/Desktop/extracted_images" />
+    <param name="extracted_imgs" command="mkdir -m 777 -p /home/yyajima/Desktop/extracted_images" />
 
-  <node pkg="rosbag" type="play" name="rosbag" args="-r 5 /home/yyajima/Desktop/igvc_vision_bag/JESSII_COMPO_POST_RAMP_2019-06-08-11-58-48.bag"/>
+  <node pkg="rosbag" type="play" name="rosbag" args="-r 5 /media/yyajima/RJ-HDD-01/IGVC/JESSII_COMPO_PRE_RAMP_2019-06-07-15-20-29.bag"/>
 
   <node name="extract" pkg="image_view" type="extract_images" respawn="false" output="screen" cwd="node">
 
