@@ -9,12 +9,9 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <tf/transform_listener.h>
-<<<<<<< HEAD
 #include <igvc_utils/NodeUtils.hpp>
 #include <velodyne_pointcloud/point_types.h>
-=======
 #include "velodyne_pointcloud/point_types.h"
->>>>>>> 605754bdd02ddeda2d8e3602c53a54f148b48982
 
 /**
  * Reads from velodyne pointcloud and uses a pinhole camera model in order to correlate pixels to 3d points.
