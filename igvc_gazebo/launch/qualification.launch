@@ -10,7 +10,7 @@
 
   <!-- Vehicle pose -->
   <arg name="x" value="-30"/>
-  <arg name="z" value="0.1525"/>
+  <arg name="z" value="1"/>
   <arg name="roll" value="0.0"/>
   <arg name="pitch" value="0.0"/>
   <arg name="yaw" value="0"/>
@@ -34,7 +34,7 @@
     <arg name="debug" value="false"/>
   </include>
 
-  <include file="$(find igvc_description)/launch/spawn_jaymii.launch">
+  <include file="$(find igvc_description)/launch/spawn_jessiii.launch">
       <arg name="x" value="$(arg x)"/>
 
       <!-- maps track value to different starting locations -->

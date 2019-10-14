@@ -1,14 +1,15 @@
 <?xml version="1.0"?>
 <sdf version="1.5">
-  <model name="grass_plane">
+  <model name="qualification">
     <static>true</static>
     <link name="link">
       <collision name="collision">
         <geometry>
-          <plane>
-            <normal>0 0 1</normal>
-            <size>100 100</size>
-          </plane>
+          <heightmap>
+            <uri>model://urdf/models/qualification/heightmap.png</uri>
+            <size>100 100 1</size>
+            <pos>0 0 0</pos>
+          </heightmap>
         </geometry>
         <surface>
           <friction>
@@ -22,10 +23,12 @@
       <visual name="visual">
         <cast_shadows>false</cast_shadows>
         <geometry>
-          <plane>
-            <normal>0 0 1</normal>
-            <size>100 100</size>
-          </plane>
+          <heightmap>
+            <use_terrain_paging>false</use_terrain_paging>
+            <uri>model://urdf/models/qualification/heightmap.png</uri>
+            <size>100 100 1</size>
+            <pos>0 0 0</pos>
+          </heightmap>
         </geometry>
         <material>
           <script>
