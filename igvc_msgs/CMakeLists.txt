@@ -20,6 +20,8 @@ add_message_files(
     map.msg
     igvc_path.msg
     trajectory_point.msg
+    line.msg
+    lineArray.msg
     trajectory.msg
 )
 

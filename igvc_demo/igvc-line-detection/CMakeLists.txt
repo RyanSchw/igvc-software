@@ -1,0 +1,5 @@
+target_include_directories(igvc-line-detection PRIVATE ${catkin_INCLUDE_DIRS})
+set(SOURCES main.cpp HackathonPipeline.cpp ${YOUR_DIRECTORY}/HackathonPipeline.h)
+add_executable(igvc-line-detection ${SOURCES})
+target_link_libraries(igvc-line-detection ${catkin_LIBRARIES} ${OpenCV_LIBS})
+add_dependencies(igvc-line-detection ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

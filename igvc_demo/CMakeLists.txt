@@ -9,6 +9,7 @@ include(../igvc.cmake)
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     rospy
+    igvc_msgs
     )
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
