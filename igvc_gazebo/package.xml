@@ -35,7 +35,6 @@
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>nodelet</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>
-  <exec_depend>velodyne_gazebo_plugins</exec_depend>
   <exec_depend>ros_control</exec_depend>
   <exec_depend>gazebo_ros_pkgs</exec_depend>
 </package>

@@ -75,7 +75,7 @@ segmented_free_space:
     std_dev: 3
     threshold: 127 #0 - 255
 topics:
-    lidar: "/velodyne_points"
+    lidar: "/scan"
     line_segmentation:
         left: "/cam/left/segmented/image"
         center: "/cam/center/segmented/image"

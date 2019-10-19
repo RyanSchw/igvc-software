@@ -1,6 +1,6 @@
 pointcloud_filter:
     topic:
-        input: "velodyne_points"
+        input: "scan"
         transformed: "lidar/transformed"
         occupied: "lidar/occupied"
         free: "lidar/free"

@@ -381,14 +381,14 @@ Visualization Manager:
       Max Intensity: 14
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: Velodyne Pointcloud
+      Name: Scan
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.02500000037252903
       Style: Spheres
-      Topic: /velodyne_points
+      Topic: /Scan
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
