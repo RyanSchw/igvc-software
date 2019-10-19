@@ -19,11 +19,11 @@ TebLocalPlannerROS:
 
   # Robot
 
-  max_vel_x: 1.6
-  max_vel_x_backwards: 0.8
+  max_vel_x: 0.4
+  max_vel_x_backwards: 0.2
   max_vel_y: 0.0
-  max_vel_theta: 0.8
-  acc_lim_x: 4.0
+  max_vel_theta: 1.0
+  acc_lim_x: 1.0
   acc_lim_theta: 2.0
   min_turning_radius: 0.0 # diff-drive robot (can turn on place!)
 
@@ -32,14 +32,14 @@ TebLocalPlannerROS:
 
   # GoalTolerance
 
-  xy_goal_tolerance: 0.2
+  xy_goal_tolerance: 0.05
   yaw_goal_tolerance: 1.57
   free_goal_vel: False
   complete_global_plan: True
 
     # Obstacles
 
-  min_obstacle_dist: 0.7 # This value must also include our robot radius, since footprint_model is set to "point".
+  min_obstacle_dist: 0.2 # This value must also include our robot radius, since footprint_model is set to "point".
   inflation_dist: 0.0
   include_costmap_obstacles: True
   costmap_obstacles_behind_robot_dist: 1.5
