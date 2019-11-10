@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
              roscpp
              rospy
              std_msgs
+             mbf_msgs
              igvc_msgs
              image_geometry
              image_transport
@@ -22,7 +23,19 @@ find_package(catkin REQUIRED COMPONENTS
              tf_conversions
              robot_localization
              parameter_assertions
-             )
+             costmap_2d
+             dynamic_reconfigure
+             igvc_utils
+             grid_map_core
+             grid_map_ros
+             grid_map_cv
+             grid_map_filters
+             grid_map_loader
+             grid_map_msgs
+             grid_map_octomap
+             grid_map_rviz_plugin
+             grid_map_visualization
+    )
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
@@ -107,7 +120,8 @@ catkin_package(
 
 # set default build type
 IF (NOT CMAKE_BUILD_TYPE)
-    SET(CMAKE_BUILD_TYPE RelWithDebInfo)
+    SET(CMAKE_BUILD_TYPE Release)
+    add_compile_options(-march=native)
 ENDIF (NOT CMAKE_BUILD_TYPE)
 
 ## Specify additional locations of header files
@@ -169,6 +183,7 @@ include_directories(
 #   # myfile2
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
+install( DIRECTORY config DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION} )
 
 #############
 ## Testing ##
@@ -206,3 +221,6 @@ add_subdirectory(src/d_lite_planner)
 add_subdirectory(src/field_d_planner)
 
 add_subdirectory(src/back_circle)
+
+add_subdirectory(src/action_server)
+add_subdirectory(src/differential_drive)
