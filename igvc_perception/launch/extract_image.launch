@@ -9,7 +9,7 @@
     <!-- Create a directory for saving raw images -->
     <param name="extracted_imgs" command="mkdir -m 777 -p /home/yyajima/Desktop/igvc_files" />
 
-  <node pkg="rosbag" type="play" name="rosbag" args="-r 10 /media/yyajima/RJ-HDD-01/IGVC/JESSII_COMPO_RUN_3_2019-06-08-17-12-31.bag"/>
+  <node pkg="rosbag" type="play" name="rosbag" args="-r 10 /media/yyajima/RJ-HDD-01/IGVC/JESSII_RUN_SUN_2_2019-06-10-15-18-43.bag"/>
 
   <node name="extract" pkg="image_view" type="extract_images" respawn="false" output="screen" cwd="node">
     <remap from="image" to="/usb_cam_center/image_raw"/>
