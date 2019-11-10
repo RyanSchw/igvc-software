@@ -54,7 +54,7 @@ def check_how_many_folders(folder_dir):
 
 def create_test_train_files(dataset_path,file_train,file_test):
     # Percentage of images to be used for the test set
-    percentage_test = 10
+    percentage_test = 30
 
     # Populate train.txt and test.txt
     counter = 1
@@ -78,7 +78,7 @@ def main():
                         help='Remove repeated images after extracting raw images from bag files')
     parser.add_argument('--test_train_generation', action='store_true', default=False,
                         help='Create a test and train file for neuronet training.')
-    parser.add_argument('--reduce_data_size', type=int, default=2,
+    parser.add_argument('--reduce_data_size', type=int, default=0,
                 help='Type your factor to devide your size of image folder')
     args = parser.parse_args()
 
