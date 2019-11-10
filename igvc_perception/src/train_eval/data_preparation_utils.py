@@ -1,3 +1,8 @@
+"""
+This script allows to preprocess raw images and annotations for training the cnn model.
+Note: this file uses python3 not python2
+Author: Yosuke Yajima
+"""
 # import the necessary packages
 from skimage import measure
 import matplotlib.pyplot as plt

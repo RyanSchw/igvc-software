@@ -18,8 +18,6 @@ import utils
 # np.set_printoptions(threshold=np.nan)
 torch.set_printoptions(precision=10)
 
-#TODO: Create a function to plot a loss and iteration graph
-
 # Training settings.
 parser = argparse.ArgumentParser(description='IGVC segmentation of lines.')
 
@@ -157,11 +155,6 @@ def train(epoch):
         # prepare datant
         images = Variable(batch[0])
         targets = Variable(batch[1])
-        #print(targets)
-        #cv2.imshow("target", np.hstack(tuple([targets.cpu().data.numpy()[i][0] for i in range(targets.cpu().data.numpy().shape[0])])))
-        #cv2.imshow("images", np.hstack(tuple([images.cpu().data.numpy()[i][0] for i in range(images.cpu().data.numpy().shape[0])])))
-        #cv2.waitKey(10)
-        #pdb.set_trace()
 
         if args.cuda:
             images, targets = images.cuda(), targets.cuda()
