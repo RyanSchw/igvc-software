@@ -64,14 +64,13 @@ class IGVCDataset(data.Dataset):
 
         #Access to red color only (OpenCV: BGR) This is because the lines are categorized as red color
         # And we are interested in lines for the line detection.
-        #target = target[:,:,1]
-
+        target = target[:,:,2]
         img = cv2.resize(img, (self.im_size[1],self.im_size[2]))
         target = cv2.resize(target, (self.im_size[1], self.im_size[2]))
-        target = cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)
-
         target[target != 0] = 255
-
+        #cv2.imshow("target", target) #Check if the image is collectlly displayed as a binary image
+        #cv2.waitKey(0)
+        
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         img = Image.fromarray(img)
