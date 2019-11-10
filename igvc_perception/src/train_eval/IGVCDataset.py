@@ -62,20 +62,15 @@ class IGVCDataset(data.Dataset):
             img = cv2.flip(img,1)
             target = cv2.flip(target,1)
 
-        #Access to red color only (OpenCV: BGR)
+        #Access to red color only (OpenCV: BGR) This is because the lines are categorized as red color
+        # And we are interested in lines for the line detection.
         #target = target[:,:,1]
-        #cv2.imshow('img: ', img)
-        #cv2.imshow('target: ', target)
-        #cv2.waitKey(0)
 
         img = cv2.resize(img, (self.im_size[1],self.im_size[2]))
         target = cv2.resize(target, (self.im_size[1], self.im_size[2]))
         target = cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)
 
         target[target != 0] = 255
-        #cv2.imshow('img: ', img)
-        #cv2.imshow('target: ', target)
-        #cv2.waitKey(0)
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
