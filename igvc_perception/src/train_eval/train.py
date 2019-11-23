@@ -75,6 +75,7 @@ class TrainModel():
         self.iters = []
         self.lr = None
         self.lrs = []
+        self.train_loss = None
         self.train_losses = []
         self.val_losses = []
         self.val_accuracies = []
@@ -83,6 +84,7 @@ class TrainModel():
         self.train_dataset = None
         self.val_dataset = None
         self.val_loader = None
+        self.criterion = None
     
     def main(self):
         torch.set_printoptions(precision=10)
@@ -130,7 +132,7 @@ class TrainModel():
             test_dataset = IGVCDataset(self.test_txt, im_size=args.im_size, split='test', transform=transform)
             test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
 
-        criterion = F.binary_cross_entropy
+        self.criterion = F.binary_cross_entropy
         if args.cuda:
             self.model.cuda()
         
@@ -143,11 +145,11 @@ class TrainModel():
             metrics = {'iters':[], 'train_loss':[], 'val_loss':[], 'val_acc':[]}
 
             for epoch in range(1, args.epochs + 1):
-                iters, train_losses, val_losses, val_accuracies = self.train(epoch)
-                metrics['iters'] += iters
-                metrics['train_loss'] += train_losses
-                metrics['val_loss'] += val_losses
-                metrics['val_acc'] += val_accuracies
+                self.iters, self.train_losses, self.val_losses, self.val_accuracies = self.train(epoch)
+                metrics['iters'] += self.iters
+                metrics['train_loss'] += self.train_losses
+                metrics['val_loss'] += self.val_losses
+                metrics['val_acc'] += self.val_accuracies
                 if (epoch % args.save_interval == 0 and args.save_model):
                     save_path = os.path.join(self.backup_dir, 'IGVCModel' + '_' + str(epoch) + '.pt')
                     print('Saving model: %s' % save_path)
@@ -168,7 +170,7 @@ class TrainModel():
 
             self.optimizer.zero_grad()
             outputs = self.model(images)
-            loss = criterion(outputs, targets)
+            loss = self.criterion(outputs, targets)
             loss.backward()
             self.optimizer.step()
 
@@ -189,22 +191,22 @@ class TrainModel():
                     print('Learning rate decayed to %f.' % self.lr)
 
             if batch_idx % args.log_interval == 0:
-                val_loss, val_acc = evaluate('val', n_batches=80)
-                train_loss = loss.item()
-                iters.append(len(train_loader.dataset)*(epoch-1)+batch_idx)
+                val_loss, val_acc = self.evaluate('val', n_batches=80)
+                self.train_loss = loss.item()
+                self.iters.append(len(self.train_loader.dataset)*(epoch-1)+batch_idx)
                 self.lrs.append(self.lr)
-                train_losses.append(train_loss)
-                val_losses.append(val_loss)
-                val_accuracies.append(val_acc)
+                self.train_losses.append(self.train_loss)
+                self.val_losses.append(val_loss)
+                self.val_accuracies.append(val_acc)
 
                 examples_this_epoch = batch_idx * len(images)
-                epoch_progress = 100. * batch_idx / len(train_loader)
+                epoch_progress = 100. * batch_idx / len(self.train_loader)
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\t'
                     'Train Loss: {:.6f}\tVal Loss: {:.6f}\tVal Acc: {}'.format(
-                    epoch, examples_this_epoch, len(train_loader.dataset),
-                    epoch_progress, train_loss, val_loss, val_acc))
+                    epoch, examples_this_epoch, len(self.train_loader.dataset),
+                    epoch_progress, self.train_loss, val_loss, val_acc))
 
-        return iters, train_losses, val_losses, val_accuracies
+        return self.iters, self.train_losses, self.val_losses, self.val_accuracies
 
     def evaluate(self, split, verbose=False, n_batches=None):
         '''
@@ -216,7 +218,7 @@ class TrainModel():
         correct = 0
         n_examples = 0
         if split == 'val':
-            loader = val_loader
+            loader = self.val_loader
         elif split == 'test':
             loader = test_loader
 
@@ -226,7 +228,7 @@ class TrainModel():
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data, volatile=True), Variable(target)
             output = self.model(data)
-            loss += criterion(output, target).item()
+            loss += self.criterion(output, target).item()
             acc += (np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()!=0] > 0.5) \
                 + np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()==0] < 0.5)) / float(args.im_size[1]*args.im_size[2])
             n_examples += output.size(0)
