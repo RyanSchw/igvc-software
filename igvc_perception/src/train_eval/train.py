@@ -85,6 +85,7 @@ class TrainModel():
         self.val_dataset = None
         self.val_loader = None
         self.criterion = None
+        self.test_loader = None
     
     def main(self):
         torch.set_printoptions(precision=10)
@@ -130,7 +131,7 @@ class TrainModel():
             self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=args.weight_decay)
         else:
             test_dataset = IGVCDataset(self.test_txt, im_size=args.im_size, split='test', transform=transform)
-            test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
+            self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
 
         self.criterion = F.binary_cross_entropy
         if args.cuda:
@@ -220,7 +221,7 @@ class TrainModel():
         if split == 'val':
             loader = self.val_loader
         elif split == 'test':
-            loader = test_loader
+            loader = self.test_loader
 
         for batch_i, batch in enumerate(loader):
             data, target = batch
