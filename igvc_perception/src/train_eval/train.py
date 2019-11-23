@@ -157,7 +157,7 @@ class TrainModel():
                     torch.save(self.model.state_dict(), save_path)
                 metrics_path = os.path.join(self.backup_dir, 'metrics.npy')
                 np.save(metrics_path, metrics)
-
+    # Method for training loop
     def train(self, epoch):
         self.model.train()
         # train loop
@@ -208,7 +208,7 @@ class TrainModel():
                     epoch_progress, self.train_loss, val_loss, val_acc))
 
         return self.iters, self.train_losses, self.val_losses, self.val_accuracies
-
+        
     def evaluate(self, split, verbose=False, n_batches=None):
         '''
         Compute loss on val or test data.
