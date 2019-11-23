@@ -68,19 +68,24 @@ args = parser.parse_args()
 # Model Class
 class TrainModel():
     def __init__(self):
-        self.precision = 10
         self.train_txt = None
         self.test_txt = None
         self.backup_dir = None
         self.model = None
         self.iters = []
+        self.lr = None
         self.lrs = []
         self.train_losses = []
         self.val_losses = []
         self.val_accuracies = []
+        self.optimizer = None
+        self.train_loader = None
+        self.train_dataset = None
+        self.val_dataset = None
+        self.val_loader = None
     
     def main(self):
-        torch.set_printoptions(self.precision=10)
+        torch.set_printoptions(precision=10)
         args.cuda = not args.no_cuda and torch.cuda.is_available()
         torch.manual_seed(args.seed)
         # Check if the cuda is available
@@ -111,16 +116,16 @@ class TrainModel():
 
         # Datasets and dataloaders.
         if not args.test:
-            train_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='train', transform=transform, val_samples=args.val_samples,
+            self.train_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='train', transform=transform, val_samples=args.val_samples,
                     preprocessor = functools.partial(add_random_saturation_and_value, distortion_percentage = args.distortion_percentage) if args.add_distortion else None)
-            val_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='val', transform=transform, val_samples=args.val_samples)
-            train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
-            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
+            self.val_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='val', transform=transform, val_samples=args.val_samples)
+            self.train_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
+            self.val_loader = torch.utils.data.DataLoader(self.val_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
 
             # Optmizer
-            lr = args.lr
-            print('Initial lr: %f.' % lr)
-            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+            self.lr = args.lr
+            print('Initial lr: %f.' % self.lr)
+            self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=args.weight_decay)
         else:
             test_dataset = IGVCDataset(self.test_txt, im_size=args.im_size, split='test', transform=transform)
             test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
@@ -138,7 +143,7 @@ class TrainModel():
             metrics = {'iters':[], 'train_loss':[], 'val_loss':[], 'val_acc':[]}
 
             for epoch in range(1, args.epochs + 1):
-                iters, train_losses, val_losses, val_accuracies = train(epoch, self.model)
+                iters, train_losses, val_losses, val_accuracies = self.train(epoch)
                 metrics['iters'] += iters
                 metrics['train_loss'] += train_losses
                 metrics['val_loss'] += val_losses
@@ -153,7 +158,7 @@ class TrainModel():
     def train(self, epoch):
         self.model.train()
         # train loop
-        for batch_idx, batch in enumerate(train_loader):
+        for batch_idx, batch in enumerate(self.train_loader):
             # prepare datant
             images = Variable(batch[0])
             targets = Variable(batch[1])
@@ -161,11 +166,11 @@ class TrainModel():
             if args.cuda:
                 images, targets = images.cuda(), targets.cuda()
 
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
             outputs = self.model(images)
             loss = criterion(outputs, targets)
             loss.backward()
-            optimizer.step()
+            self.optimizer.step()
 
             if args.vis and (batch_idx % args.log_interval == 0):
 
@@ -177,17 +182,17 @@ class TrainModel():
             # Learning rate decay.
             if epoch % args.step_interval == 0 and epoch != 1 and batch_idx == 0:
                 if args.lr_decay != 1:
-                    global lr, optimizer
-                    lr *= args.lr_decay
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr
-                    print('Learning rate decayed to %f.' % lr)
+                    self.lr, self.optimizer
+                    self.lr *= args.lr_decay
+                    for param_group in self.optimizer.param_groups:
+                        param_group['lr'] = self.lr
+                    print('Learning rate decayed to %f.' % self.lr)
 
             if batch_idx % args.log_interval == 0:
                 val_loss, val_acc = evaluate('val', n_batches=80)
                 train_loss = loss.item()
                 iters.append(len(train_loader.dataset)*(epoch-1)+batch_idx)
-                lrs.append(lr)
+                self.lrs.append(self.lr)
                 train_losses.append(train_loss)
                 val_losses.append(val_loss)
                 val_accuracies.append(val_acc)
@@ -205,7 +210,7 @@ class TrainModel():
         '''
         Compute loss on val or test data.
         '''
-        model.eval()
+        self.model.eval()
         loss = 0
         acc = 0
         correct = 0
@@ -220,7 +225,7 @@ class TrainModel():
             if args.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data, volatile=True), Variable(target)
-            output = model(data)
+            output = self.model(data)
             loss += criterion(output, target).item()
             acc += (np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()!=0] > 0.5) \
                 + np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()==0] < 0.5)) / float(args.im_size[1]*args.im_size[2])
@@ -256,4 +261,5 @@ def add_random_saturation_and_value(img, distortion_percentage):
     return img
 
 if __name__ == "__main__":
-    main()
+    train = TrainModel()
+    train.main()
