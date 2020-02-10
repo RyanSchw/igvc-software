@@ -1,268 +1,198 @@
 import argparse
-import functools
 import cv2
 import numpy as np
 import os
-import pdb
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
-import torchvision
 from torchvision import transforms
 
 from IGVCDataset import IGVCDataset
 
 import models.model
 import utils
+from collections import defaultdict
 
-# Training settings.
-parser = argparse.ArgumentParser(description='IGVC segmentation of lines.')
+from torch.utils.tensorboard import SummaryWriter
+import torchvision
 
-# Hyperparameters.
-parser.add_argument('--batch_size', type=int, default=1,
-                    help='input batch size for training.')
-parser.add_argument('--epochs', type=int, default=5,
-                    help='number of epochs to train')
-parser.add_argument('--im_size', type=int, nargs=3, default=[3,400,400],
-                    help='image dimensions for training.')
-parser.add_argument('--kernel_size', type=int, default=3,
-                    help='size of convolution kernels/filters.')
-parser.add_argument('--lr', type=float, default=1e-3,
-                    help='learning rate.')
-parser.add_argument('--lr_decay', type=float, default=1.0,
-                    help='Learning rate decay multiplier.')
-parser.add_argument('--step_interval', type=int, default=100,
-                    help='Update learning rate every <step_interval> epochs.')
-parser.add_argument('--weight_decay', type=float, default=0.0,
-                    help='Weight decay hyperparameter.')
-
-# Other configuration.
-parser.add_argument('--save_model', action='store_true', default=False,
-                    help='Save pytorch model.')
-parser.add_argument('--save_interval', type=int, default=1,
-                    help='Save pytorch model after <save_interval> epochs.')
-parser.add_argument('--load_model', type=str, default=None,
-                    help='Load model from .pt file, either for initialization or evaluation.')
-parser.add_argument('--log_interval', type=int, default=10,
-                    help='number of batches between logging train status.')
-parser.add_argument('--vis', action='store_true', default=False,
-                    help='Visualize model output every log interval.')
-parser.add_argument('--no_cuda', action='store_true', default=False,
-                    help='disables CUDA training')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
-parser.add_argument('--cfgfile', type=str, default='cfg/igvc.cfg',
-                    help='Directory containing cfg for train and evaluation.')
-parser.add_argument('--test', action='store_true', default=False,
-                    help='Skip training, and evaluate a loaded model on test data.')
-parser.add_argument('--val_samples', type=int, default=10,
-                    help='Number of validation samples to use from train data.')
-parser.add_argument('--add_distortion',type=bool,default=False,
-                    help='Add distortion to saturation and value channels of the image.')
-parser.add_argument('--distortion_percentage', type=float, default=0.1,
-                    help='Saturation and Value distortion percentage for images.')
-
-args = parser.parse_args()
-
-# Model Class
-class TrainModel():
-    def __init__(self):
-        self.train_txt = None
-        self.test_txt = None
-        self.backup_dir = None
-        self.model = None
-        self.iters = []
-        self.lr = None
-        self.lrs = []
-        self.train_loss = None
-        self.train_losses = []
-        self.val_losses = []
-        self.val_accuracies = []
-        self.optimizer = None
-        self.train_loader = None
-        self.train_dataset = None
-        self.val_dataset = None
-        self.val_loader = None
-        self.criterion = None
-        self.test_loader = None
+def train():
+    tb = SummaryWriter()
+    images, labels = next(iter(train_loader))
+    grid = torchvision.utils.make_grid(images)
+    tb.add_image('image', grid)
+    tb.add_graph(model.cuda(), images.cuda())
     
-    def main(self):
-        torch.set_printoptions(precision=10)
-        args.cuda = not args.no_cuda and torch.cuda.is_available()
-        torch.manual_seed(args.seed)
-        # Check if the cuda is available
-        if args.cuda:
-            print('Using cuda.')
-            torch.cuda.manual_seed(args.seed)
-        
-        kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-        transform = transforms.Compose([transforms.ToTensor(),])
-        cfg_params = utils.read_data_cfg(args.cfgfile)
-        self.train_txt = cfg_params['train']
-        self.test_txt = cfg_params['test']
-        self.backup_dir = cfg_params['backup']
-        
-        # Display current version of torch version
-        print("Your torch version is " + str(torch.__version__))
-        print("Your torchvision version is: " + str(torchvision.__version__))
-
-        if args.load_model is not None:
-            print('Loading model from %s.' % args.load_model)
-            self.model = models.model.UNet(args.im_size, args.kernel_size)
-            self.model.load_state_dict(torch.load(args.load_model))
-        elif args.test:
-            print('Missing model file for evaluating test set.')
-            exit()
-        else:
-            self.model = models.model.UNet(args.im_size, args.kernel_size)
-
-        # Datasets and dataloaders.
-        if not args.test:
-            self.train_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='train', transform=transform, val_samples=args.val_samples,
-                    preprocessor = functools.partial(add_random_saturation_and_value, distortion_percentage = args.distortion_percentage) if args.add_distortion else None)
-            self.val_dataset = IGVCDataset(self.train_txt, im_size=args.im_size, split='val', transform=transform, val_samples=args.val_samples)
-            self.train_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
-            self.val_loader = torch.utils.data.DataLoader(self.val_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
-
-            # Optmizer
-            self.lr = args.lr
-            print('Initial lr: %f.' % self.lr)
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=args.weight_decay)
-        else:
-            test_dataset = IGVCDataset(self.test_txt, im_size=args.im_size, split='test', transform=transform)
-            self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
-
-        self.criterion = F.binary_cross_entropy
-        if args.cuda:
-            self.model.cuda()
-        
-        if args.test:
-            print("Running evaluation on test set.")
-            test_loss, test_acc = evaluate('test')
-            print('Test loss: %f  Test accuracy: %f' % (test_loss, test_acc))
-        else:
-            # train the model one epoch at a time
-            metrics = {'iters':[], 'train_loss':[], 'val_loss':[], 'val_acc':[]}
-
-            for epoch in range(1, args.epochs + 1):
-                self.iters, self.train_losses, self.val_losses, self.val_accuracies = self.train(epoch)
-                metrics['iters'] += self.iters
-                metrics['train_loss'] += self.train_losses
-                metrics['val_loss'] += self.val_losses
-                metrics['val_acc'] += self.val_accuracies
-                if (epoch % args.save_interval == 0 and args.save_model):
-                    save_path = os.path.join(self.backup_dir, 'IGVCModel' + '_' + str(epoch) + '.pt')
-                    print('Saving model: %s' % save_path)
-                    torch.save(self.model.state_dict(), save_path)
-                metrics_path = os.path.join(self.backup_dir, 'metrics.npy')
-                np.save(metrics_path, metrics)
-    # Method for training loop
-    def train(self, epoch):
-        self.model.train()
+    for epoch in range(1, args.epochs + 1):
+        batch_metrics = defaultdict(list)
+        batch_metrics = {'iters':[],'lrs':[],'train_losses':[],'val_losses':[],'val_accuracies':[]}
+        model.train()
         # train loop
-        for batch_idx, batch in enumerate(self.train_loader):
-            # prepare datant
+        for batch_idx, batch in enumerate(train_loader):
+            # prepare data
             images = Variable(batch[0])
             targets = Variable(batch[1])
 
             if args.cuda:
                 images, targets = images.cuda(), targets.cuda()
 
-            self.optimizer.zero_grad()
-            outputs = self.model(images)
-            loss = self.criterion(outputs, targets)
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, targets)
             loss.backward()
-            self.optimizer.step()
+            optimizer.step()
 
-            if args.vis and (batch_idx % args.log_interval == 0):
-
-                cv2.imshow('output: ', np.hstack(tuple([outputs.cpu().data.numpy()[i][0] for i in range(outputs.cpu().data.numpy().shape[0])])))
-                cv2.imshow('target: ', np.hstack(tuple([targets.cpu().data.numpy()[i][0] for i in range(outputs.cpu().data.numpy().shape[0])])))
+            if args.vis and batch_idx % args.log_interval == 0 and images.shape[0] == 1:
+                cv2.imshow('output: ', outputs.cpu().data.numpy()[0][0])
+                cv2.imshow('target: ', targets.cpu().data.numpy()[0][0])
                 cv2.waitKey(10)
-
-
+            """
             # Learning rate decay.
             if epoch % args.step_interval == 0 and epoch != 1 and batch_idx == 0:
                 if args.lr_decay != 1:
-                    self.lr, self.optimizer
-                    self.lr *= args.lr_decay
-                    for param_group in self.optimizer.param_groups:
-                        param_group['lr'] = self.lr
-                    print('Learning rate decayed to %f.' % self.lr)
-
+                    global lr, optimizer
+                    lr *= args.lr_decay
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = lr
+                    print('Learning rate decayed to %f.' % lr)
+            """
             if batch_idx % args.log_interval == 0:
-                val_loss, val_acc = self.evaluate('val', n_batches=80)
-                self.train_loss = loss.item()
-                self.iters.append(len(self.train_loader.dataset)*(epoch-1)+batch_idx)
-                self.lrs.append(self.lr)
-                self.train_losses.append(self.train_loss)
-                self.val_losses.append(val_loss)
-                self.val_accuracies.append(val_acc)
+                val_loss, val_acc = evaluate('val', n_batches=80)
+                train_loss = loss.item()
+                batch_metrics['iters'].append(len(train_loader.dataset)*(epoch-1)+batch_idx)
+                batch_metrics['lrs'].append(lr)
+                batch_metrics['train_losses'].append(train_loss)
+                batch_metrics['val_losses'].append(val_loss)
+                batch_metrics['val_accuracies'].append(val_acc)
 
                 examples_this_epoch = batch_idx * len(images)
-                epoch_progress = 100. * batch_idx / len(self.train_loader)
+                epoch_progress = 100. * batch_idx / len(train_loader)
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\t'
                     'Train Loss: {:.6f}\tVal Loss: {:.6f}\tVal Acc: {}'.format(
-                    epoch, examples_this_epoch, len(self.train_loader.dataset),
-                    epoch_progress, self.train_loss, val_loss, val_acc))
+                    epoch, examples_this_epoch, len(train_loader.dataset),
+                    epoch_progress, train_loss, val_loss, val_acc))
 
-        return self.iters, self.train_losses, self.val_losses, self.val_accuracies
+        print("epoch: {} total train_loss: {} total val_loss: {} total val_acc: {}".format(epoch,sum(batch_metrics['train_losses']), sum(batch_metrics['val_losses']), sum(batch_metrics['val_accuracies'])/len(batch_metrics['val_accuracies'])))
+
+        if (epoch % args.save_interval == 0 and args.save_model):
+            save_path = os.path.join(backup_dir, 'IGVCModel' + '_' + str(epoch) + '.pt')
+            print('Saving model: %s' % save_path)
+            torch.save(model.state_dict(), save_path)
+       
+        # Tensorboard Implementation
+        tb.add_scalar('train loss', sum(batch_metrics['train_losses']), epoch)
+        tb.add_scalar('val loss', sum(batch_metrics['val_losses']), epoch)
+        tb.add_scalar('val_acc', sum(batch_metrics['val_accuracies'])/len(batch_metrics), epoch)
+
+        for name, weight in model.named_parameters():
+            tb.add_histogram(name, weight, epoch)
+            tb.add_histogram("{}.grad".format(name), weight.grad, epoch)
         
-    def evaluate(self, split, verbose=False, n_batches=None):
-        '''
-        Compute loss on val or test data.
-        '''
-        self.model.eval()
-        loss = 0
-        acc = 0
-        correct = 0
-        n_examples = 0
-        if split == 'val':
-            loader = self.val_loader
-        elif split == 'test':
-            loader = self.test_loader
+        metrics_path = os.path.join(backup_dir, 'metrics.npy')
+        np.save(metrics_path, batch_metrics)
+    tb.close()
 
-        for batch_i, batch in enumerate(loader):
-            data, target = batch
-            if args.cuda:
-                data, target = data.cuda(), target.cuda()
-            data, target = Variable(data, volatile=True), Variable(target)
-            output = self.model(data)
-            loss += self.criterion(output, target).item()
-            acc += (np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()!=0] > 0.5) \
-                + np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()==0] < 0.5)) / float(args.im_size[1]*args.im_size[2])
-            n_examples += output.size(0)
+def evaluate(split, verbose=False, n_batches=None):
+    '''
+    Compute loss on val or test data.
+    '''
+    model.eval()
+    loss = 0
+    acc = 0
+    correct = 0
+    n_examples = 0
+    if split == 'val':
+        loader = val_loader
+    elif split == 'test':
+        loader = test_loader
+    for batch_i, batch in enumerate(loader):
+        data, target = batch
+        if args.cuda:
+            data, target = data.cuda(), target.cuda()
+        #data, target = Variable(data, volatile=True), Variable(target)
+        data, target = Variable(data), Variable(target)
+        output = model(data)
+        loss += criterion(output, target).item()
+        acc += (np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()!=0] > 0.5) \
+            + np.sum(output.cpu().data.numpy()[target.cpu().data.numpy()==0] < 0.5)) / float(args.im_size[1]*args.im_size[2])
+        n_examples += output.size(0)
 
-            if n_batches and (batch_i == n_batches-1):
-                break
+        if n_batches and (batch_i == n_batches-1):
+            break
 
-        loss /= n_examples
-        acc /= n_examples
-        return loss, acc
+    loss /= n_examples
+    acc /= n_examples
+    return loss, acc
 
-def add_random_saturation_and_value(img, distortion_percentage):
+# 3. Added a run builder for hyperparameter tuning
+# 4. Refactor this code similar to unet pytorch
 
-    """
-    Applies a randomly chosen saturtation and value distortion to the image within
-    bounds of the specified distortion_percentage.
-    """
+if __name__ == '__main__':
+    # Set print option
+    np.set_printoptions(threshold=5)
+    torch.set_printoptions(precision=10)
 
-    # OpenCV HSV Ranges [{0,180}, {0,255}, {0,255}]
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    # Get info from argparse class
+    args = utils.get_args()
+    
+    # Check if cuda is available or not
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
 
-    # calculate random distortion values
-    max_distortion = int(255.0 * distortion_percentage)
-    saturation_distortion = np.random.randint(-max_distortion, max_distortion)
-    value_distortion = np.random.randint(-max_distortion, max_distortion)
+    # Set randam seed
+    torch.manual_seed(args.seed)
+    
+    if args.cuda:
+        print('Using cuda.')
+        torch.cuda.manual_seed(args.seed)
 
-    # apply saturation and value distortion
-    img[:,:,1] = np.clip(img[:,:,1] + saturation_distortion, 0, 255)
-    img[:,:,2] = np.clip(img[:,:,2] + value_distortion, 0, 255)
+    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+    
+    transform = transforms.Compose([
+                    transforms.ToTensor(),
+            ])
+    
+    cfg_params = utils.read_data_cfg(args.cfgfile)
+    
+    train_txt = cfg_params['train']
+    test_txt = cfg_params['test']
+    backup_dir = cfg_params['backup']
 
-    img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
-    return img
+    if args.load_model is not None:
+        print('Loading model from %s.' % args.load_model)
+        model = models.model.UNet(args.im_size, args.kernel_size)
+        model.load_state_dict(torch.load(args.load_model))
+    elif args.test:
+        print('Missing model file for evaluating test set.')
+        exit()
+    else:
+        model = models.model.UNet(args.im_size, args.kernel_size)
 
-if __name__ == "__main__":
-    train = TrainModel()
-    train.main()
+    # Datasets and dataloaders.
+    if not args.test:
+        train_dataset = IGVCDataset(train_txt, im_size=args.im_size, split='train', transform=transform, val_samples=args.val_samples)
+        val_dataset = IGVCDataset(train_txt, im_size=args.im_size, split='val', transform=transform, val_samples=args.val_samples)
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
+        
+        # Optmizer
+        lr = args.lr
+        print('Initial lr: %f.' % lr)
+    else:
+        test_dataset = IGVCDataset(test_txt, im_size=args.im_size, split='test', transform=transform)
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, **kwargs)
+
+    # Declare loss function and optimizer
+    criterion = F.binary_cross_entropy
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+
+    if args.cuda:
+        model.cuda()
+
+    if args.test:
+        print("Running evaluation on test set.")
+        test_loss, test_acc = evaluate('test')
+        print('Test loss: %f  Test accuracy: %f' % (test_loss, test_acc))
+    else:
+        # train the model
+        train()
